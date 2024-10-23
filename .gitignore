@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Exclude the entire sandbox directory
+/Users/kmcbride/Documents/GitHub/sandbox/

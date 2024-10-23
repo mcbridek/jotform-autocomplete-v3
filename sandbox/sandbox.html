@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Sheets Autocomplete Widget - Sandbox</title>
+    <link rel="stylesheet" href="sandbox-styles.css">
+</head>
+<body>
+    <div class="sandbox-container">
+        <div class="settings-column">
+            <h2>Widget Settings</h2>
+            <div class="settings-form">
+                <label for="googleSheetId">Google Sheet ID:</label>
+                <input type="text" id="googleSheetId" value="1Xg_6DlbHku0zBiHhm54uDsubVpZDA5ELzl9rQcMS7j8">
+                
+                <label for="sheetName">Sheet Name:</label>
+                <input type="text" id="sheetName" value="FullList">
+                
+                <label for="placeholderText">Placeholder Text:</label>
+                <input type="text" id="placeholderText" value="Start typing...">
+                
+                <label for="inputWidth">Input Width:</label>
+                <input type="text" id="inputWidth" value="100%">
+                
+                <label for="autocompleteWidth">Autocomplete Width:</label>
+                <input type="text" id="autocompleteWidth" value="100%">
+                
+                <label for="dynamicResize">
+                    <input type="checkbox" id="dynamicResize" checked>
+                    Dynamic Resize
+                </label>
+                
+                <button onclick="updateWidgetSettings()">Update Settings</button>
+            </div>
+        </div>
+        <div class="preview-column">
+            <div class="preview-section">
+                <h3>Widget Preview</h3>
+                <iframe id="widgetFrame" src="../index.html" width="100%" height="100"></iframe>
+            </div>
+            <div class="suggestions-section">
+                <div id="suggestionsDisplay"></div>
+            </div>
+            <div class="fetched-data-section">
+                <div id="fetchedDataDisplay"></div>
+            </div>
+            <div class="log-section">
+                <h3>Console Output</h3>
+                <div id="fullResultsDump"></div>
+            </div>
+        </div>
+    </div>
+    <script src="sandbox.js"></script>
+</body>
+</html>

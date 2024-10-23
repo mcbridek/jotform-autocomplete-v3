@@ -28,7 +28,12 @@ body {
 }
 
 #autocomplete-input:focus {
-  border-color: #66afe9;
+  border-bottom-color: #66afe9;
+}
+
+#autocomplete-input:disabled {
+  background-color: #e9ecef;
+  color: #6c757d;
 }
 
 #suggestions-list {
@@ -41,7 +46,6 @@ body {
   overflow-y: auto;
   border: 1px solid #66afe9;
   border-top: none;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
   background-color: #fff;
   margin: 0;
   padding: 0;
@@ -69,6 +73,10 @@ body {
   color: #66afe9;
 }
 
+#suggestions-list li.active {
+  background-color: #e0e0e0;
+}
+
 .spinner {
   border: 2px solid #f3f3f3;
   border-top: 2px solid #3498db;
@@ -77,8 +85,8 @@ body {
   height: 20px;
   animation: spin 1s linear infinite;
   position: absolute;
-  right: 10px;
-  top: 50%;
+  right: 20px;
+  top: 25%;
   transform: translateY(-50%);
   display: none;
 }

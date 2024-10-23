@@ -1,453 +1,305 @@
-// Add this function at the beginning of the file
-function log(message, data) {
-  console.log(message, JSON.stringify(data, null, 2));
-  // You can also send this to the parent window for debugging in sandbox
-  if (window.parent !== window) {
-    window.parent.postMessage({ type: 'log', message, data }, '*');
-  }
-}
-
-// Default settings from widget.json
-const defaultSettings = {
-  googleSheetId: "1Xg_6DlbHku0zBiHhm54uDsubVpZDA5ELzl9rQcMS7j8",
-  columnIndex: 1,
-  placeholderText: "Start typing...",
-  inputWidth: "100%",
-  autocompleteWidth: "100%",
-  dynamicResize: true,
-  threshold: 0.2,
-  distance: 100,
-  maxResults: 5,
-  minCharRequired: 2,
-  debounceTime: 300
-};
-
-// Function to get settings, using defaults if JotForm is not available
-function getWidgetSetting(settingName, parseFunc = (val) => val) {
-  try {
-    if (typeof JFCustomWidget !== 'undefined') {
-      const setting = JFCustomWidget.getWidgetSetting(settingName);
-      log(`Getting setting for ${settingName}:`, setting);
-      return setting !== undefined && setting !== '' ? parseFunc(setting) : defaultSettings[settingName];
-    }
-  } catch (error) {
-    console.error(`Error getting widget setting ${settingName}:`, error);
-  }
-  return defaultSettings[settingName];
-}
-
-// Function to fetch data from a public Google Sheet (CSV format)
-async function fetchGoogleSheetData(sheetId, columnIndex) {
-  const corsProxy = 'https://cors-anywhere.herokuapp.com/';
-  const url = sheetId === 'test' 
-    ? 'https://jsonplaceholder.typicode.com/users'
-    : `${corsProxy}https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv`;
-
-  try {
-    log('Fetching from URL:', url);
-    const response = await fetch(url, {
-      headers: {
-        'X-Requested-With': 'XMLHttpRequest'
-      }
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    
-    let data;
-    if (sheetId === 'test') {
-      data = await response.json();
-      log('Fetched test data:', data);
-      return data.map(user => user.name); // Return only names for test data
-    } else {
-      const csvText = await response.text();
-      log('Fetched CSV data length:', csvText.length);
-      const rows = csvText.split('\n').map(row => 
-        row.split(',').map(cell => cell.replace(/^"|"$/g, '').trim())
-      );
-      // Extract only the second column (index 1)
-      const columnData = rows.slice(1).map(row => row[columnIndex] || '');
-      log('Total number of items:', columnData.length);
-      log('First 5 items:', columnData.slice(0, 5));
-      log('Last 5 items:', columnData.slice(-5));
-      return columnData;
-    }
-  } catch (error) {
-    console.error('Error fetching data:', error);
-    console.error('Error details:', error.message, error.stack);
-    return [];
-  }
-}
-
-// Debounce function
-function debounce(func, wait) {
-  let timeout;
-  return function (...args) {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func.apply(this, args), wait);
+(function() {
+  const widgetConfig = {
+    defaultSpreadsheetId: 'your_default_spreadsheet_id_here',
+    sheetName: 'Sheet1',
+    columnIndex: 1, // Always use the second column
+    debounceTime: 300,
+    maxResults: 5,
+    minCharRequired: 3, // Changed from 2 to 3
+    threshold: 0.4, // Increased threshold for more lenient matching
+    distance: 100,
+    tokenize: true, // Enable tokenization
+    matchAllTokens: true // Require all tokens to match
   };
-}
 
-function getCorsProxyUrl(url) {
-  return `https://cors-anywhere.herokuapp.com/${url}`;
-}
+  let fuseInstance;
+  let debounceTimer;
+  let currentFocus = -1;
 
-// Add this function near the top of the file
-function dumpFullResults(data) {
-    window.parent.postMessage({ type: 'fullResults', results: data }, '*');
-}
+  const elements = {
+    input: document.getElementById('autocomplete-input'),
+    spinner: document.getElementById('spinner'),
+    suggestionsList: document.getElementById('suggestions-list')
+  };
 
-// Initialize the widget
-async function initializeWidget() {
-  try {
-    log('Initializing widget');
-    const input = document.getElementById('autocomplete-input');
-    const suggestionsList = document.getElementById('suggestions-list');
-    const spinner = document.getElementById('spinner');
-
-    // Get widget settings
-    const settings = {
-      sheetId: getWidgetSetting('googleSheetId'),
-      columnIndex: getWidgetSetting('columnIndex', parseInt),
-      placeholderText: getWidgetSetting('placeholderText'),
-      inputWidth: getWidgetSetting('inputWidth'),
-      autocompleteWidth: getWidgetSetting('autocompleteWidth'),
-      dynamicResize: getWidgetSetting('dynamicResize'),
-      threshold: getWidgetSetting('threshold', parseFloat),
-      distance: getWidgetSetting('distance', parseInt),
-      maxResults: getWidgetSetting('maxResults', parseInt),
-      minCharRequired: getWidgetSetting('minCharRequired', parseInt),
-      debounceTime: getWidgetSetting('debounceTime', parseInt)
-    };
-
-    log('Widget settings:', settings);
-
-    // Apply settings
-    applyWidgetSettings(input, suggestionsList, settings);
-
-    // Show spinner
-    spinner.style.display = 'block';
-
-    // Fetch data from Google Sheets
-    log('Fetching data from Google Sheet:', settings.sheetId);
-    const data = await fetchGoogleSheetData(settings.sheetId, settings.columnIndex);
-    log('Fetched data:', data);
-
-    // Hide spinner
-    spinner.style.display = 'none';
-
-    if (data.length > 0) {
-      initializeAutocomplete(input, suggestionsList, data, settings);
-      dumpFullResults(data);
-    } else {
-      console.error('No data retrieved from Google Sheet.');
+  function initWidget() {
+    window.addEventListener('message', handleMessage);
+    elements.input.addEventListener('input', handleInput);
+    elements.input.addEventListener('keydown', handleKeyDown);
+    elements.input.addEventListener('blur', handleBlur); // Add blur event listener
+    elements.suggestionsList.addEventListener('click', handleSuggestionClick);
+    
+    // Disable input field initially
+    disableInput();
+    
+    // Add JotForm Custom Widget initialization
+    if (typeof JFCustomWidget !== "undefined") {
+      JFCustomWidget.subscribe("ready", function(data) {
+        // Widget is ready, you can access data.settings here if needed
+        handleWidgetReady(data);
+      });
     }
-  } catch (error) {
-    console.error('Error initializing widget:', error);
-  }
-}
-
-function applyWidgetSettings(input, suggestionsList, settings) {
-  input.style.width = settings.inputWidth;
-  suggestionsList.style.width = settings.autocompleteWidth;
-  input.placeholder = settings.placeholderText;
-  input.setAttribute('aria-autocomplete', 'list');
-  input.setAttribute('aria-haspopup', 'listbox');
-  suggestionsList.setAttribute('role', 'listbox');
-}
-
-function initializeAutocomplete(input, suggestionsList, data, settings) {
-  if (!input || !suggestionsList) {
-    console.error('Input or suggestions list element not found');
-    return;
   }
 
-  log('Raw data received - total items:', data.length);
-  log('First 5 items of raw data:', data.slice(0, 5));
-  log('Last 5 items of raw data:', data.slice(-5));
-
-  // Data is already in the correct format, no need for transformation
-  const columnData = data.map(item => ({ name: item }));
-
-  log('Processed column data - total items:', columnData.length);
-  log('First 5 items of processed data:', columnData.slice(0, 5));
-  log('Last 5 items of processed data:', columnData.slice(-5));
-
-  // Set up Fuse.js for fuzzy searching
-  const fuse = new Fuse(columnData, {
-    shouldSort: true,
-    threshold: settings.threshold,
-    distance: settings.distance,
-    minMatchCharLength: settings.minCharRequired,
-    keys: ['name'],
-    includeScore: true,
-    includeMatches: true
-  });
-
-  log('Fuse instance created with options:', fuse.options);
-
-  let selectedIndex = -1;
-  const searchCache = {};
-  let currentSuggestions = []; // Add this line to store current suggestions
-
-  // Add event listener to the input with debounce
-  input.addEventListener('input', debounce(onInputChange, settings.debounceTime));
-
-  function onInputChange(e) {
-    let searchTerm = e.target.value;
-    
-    // Remove any numeric characters from the input
-    searchTerm = searchTerm.replace(/[0-9]/g, '');
-    
-    // Update the input value if it changed
-    if (searchTerm !== e.target.value) {
-      e.target.value = searchTerm;
+  function handleMessage(event) {
+    if (event.data.type === 'updateSettings') {
+      handleWidgetReady(event.data);
     }
+  }
 
-    log('Search term:', searchTerm);
+  function handleWidgetReady(data) {
+    const config = { ...widgetConfig, ...data.settings };
+    elements.input.placeholder = config.placeholderText || 'Begin te typen...';
+    elements.input.style.width = config.inputWidth || '100%';
+    elements.suggestionsList.style.width = config.autocompleteWidth || '100%';
+    
+    console.log('Fetching data from Google Sheets...');
+    showSpinner();
+    disableInput();
+    fetchGoogleSheetsData(config.googleSheetId, config.sheetName)
+      .then(data => {
+        console.log('Data fetched successfully:', data);
+        const processedData = processSheetData(data);
+        initFuse(processedData);
+        hideSpinner();
+        enableInput();
+      })
+      .catch(handleError);
+  }
 
-    if (searchTerm.length >= settings.minCharRequired) {
-      if (searchCache[searchTerm]) {
-        log('Using cached results for:', searchTerm);
-        displaySuggestions(searchCache[searchTerm]);
-      } else {
-        const results = fuse.search(searchTerm);
-        log('Fuse search results (first 5):', results.slice(0, 5));
-        log('Total Fuse search results:', results.length);
-        searchCache[searchTerm] = results;
-        displaySuggestions(results);
+  function disableInput() {
+    elements.input.disabled = true;
+    elements.input.style.cursor = 'not-allowed';
+    elements.input.placeholder = 'Beroepen laden...';
+  }
+
+  function enableInput() {
+    elements.input.disabled = false;
+    elements.input.style.cursor = 'text';
+    elements.input.placeholder = widgetConfig.placeholderText || 'Begin te typen...';
+  }
+
+  function showSpinner() {
+    elements.spinner.style.display = 'block';
+  }
+
+  function hideSpinner() {
+    elements.spinner.style.display = 'none';
+  }
+
+  function fetchGoogleSheetsData(spreadsheetId, sheetName) {
+    const corsAnywhereUrl = 'https://cors-anywhere.herokuapp.com/';
+    const url = `${corsAnywhereUrl}https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}`;
+    console.log('Fetching from URL:', url);
+
+    return fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+    })
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
-    } else {
-      clearSuggestions();
+      return response.text();
+    })
+    .then(text => {
+      const jsonText = text.replace('/*O_o*/', '').replace(/(google\.visualization\.Query\.setResponse\(|\);$)/g, '');
+      const data = JSON.parse(jsonText);
+      if (!data.table || !data.table.rows) {
+        throw new Error('Invalid data structure');
+      }
+      return data.table;
+    });
+  }
+
+  function processSheetData(data) {
+    const headers = data.cols.map(col => col.label);
+    const columnIndex = widgetConfig.columnIndex;
+    return data.rows.map(row => {
+      const value = row.c[columnIndex] ? row.c[columnIndex].v : '';
+      // Preprocess the value: convert to lowercase and remove special characters
+      const processedValue = value.toLowerCase().replace(/[^a-z0-9\s]/g, '');
+      return { 
+        original: value,
+        processed: processedValue
+      };
+    });
+  }
+
+  function initFuse(data) {
+    const options = {
+      keys: ['processed'],
+      threshold: widgetConfig.threshold,
+      distance: widgetConfig.distance,
+      tokenize: widgetConfig.tokenize,
+      matchAllTokens: widgetConfig.matchAllTokens,
+      findAllMatches: true
+    };
+    fuseInstance = new Fuse(data, options);
+  }
+
+  function handleInput() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      const query = elements.input.value.trim();
+      if (query.length >= widgetConfig.minCharRequired) {
+        showSpinner();
+        const results = fuseInstance.search(query).slice(0, widgetConfig.maxResults);
+        displaySuggestions(results, query);
+        hideSpinner();
+        validateInput(true);
+      } else {
+        clearSuggestions();
+        validateInput(false);
+      }
+    }, widgetConfig.debounceTime);
+  }
+
+  function validateInput(isValid) {
+    if (typeof JFCustomWidget !== "undefined") {
+      JFCustomWidget.sendData({
+        valid: isValid,
+        value: elements.input.value
+      });
     }
-    if (typeof JFCustomWidget !== 'undefined') {
-      JFCustomWidget.sendSubmit({ value: input.value, valid: true });
+  }
+
+  function displaySuggestions(results, query) {
+    clearSuggestions();
+    if (results.length === 0) {
+      return;
     }
+    results.forEach((result, index) => {
+      const li = document.createElement('li');
+      li.innerHTML = highlightMatch(result.item.original, query);
+      li.setAttribute('role', 'option');
+      li.setAttribute('data-index', index);
+      elements.suggestionsList.appendChild(li);
+    });
+    elements.suggestionsList.style.display = 'block';
+    
+    // Set input bottom border to 0px when suggestions are shown
+    elements.input.style.borderBottomLeftRadius = '0';
+    elements.input.style.borderBottomRightRadius = '0';
+    
+    // Highlight the first suggestion
+    currentFocus = 0;
+    updateActiveSuggestion();
+
+    window.parent.postMessage({ 
+      type: 'suggestionsUpdated', 
+      suggestions: results.map(r => r.item.original),
+      query: query
+    }, '*');
+
+    if (widgetConfig.dynamicResize) {
+      requestResize();
+    }
+  }
+
+  function highlightMatch(text, query) {
+    const words = query.split(/\s+/);
+    let highlightedText = text;
+    words.forEach(word => {
+      const regex = new RegExp(`(${word})`, 'gi');
+      highlightedText = highlightedText.replace(regex, '<mark style="background-color: transparent; color: black; font-weight: bold;">$1</mark>');
+    });
+    return highlightedText;
   }
 
   function clearSuggestions() {
-    suggestionsList.style.display = 'none';
-    suggestionsList.innerHTML = '';
-    
-    // Remove the class from the input when suggestions are cleared
-    input.classList.remove('suggestions-visible');
-    
-    adjustIframeHeight(true);
+    elements.suggestionsList.innerHTML = '';
+    elements.suggestionsList.style.display = 'none';
+    // Reset input bottom border when suggestions are cleared
+    elements.input.style.borderBottomLeftRadius = '8px';
+    elements.input.style.borderBottomRightRadius = '8px';
+    currentFocus = -1;
   }
 
-  function displaySuggestions(results) {
-    log('Displaying suggestions:', results);
-
-    currentSuggestions = results // Store current suggestions
-      .sort((a, b) => a.score - b.score)
-      .slice(0, settings.maxResults);
-
-    log('Filtered suggestions:', currentSuggestions);
-
-    // Clear previous suggestions
-    suggestionsList.innerHTML = '';
-    selectedIndex = -1;
-
-    if (currentSuggestions.length === 0) {
-      log('No suggestions found', {});
-      clearSuggestions();
-    } else {
-      // Populate suggestions
-      currentSuggestions.forEach((suggestion, index) => {
-        const li = document.createElement('li');
-        li.innerHTML = highlightMatch(suggestion);
-        li.setAttribute('role', 'option');
-        li.setAttribute('id', `suggestion-${index}`);
-        li.addEventListener('mousedown', (e) => {
-          e.preventDefault(); // Prevent the blur event from firing before the click
-          selectSuggestion(suggestion);
-        });
-        suggestionsList.appendChild(li);
-      });
-
-      // Pre-select the first item
-      selectedIndex = 0;
-      updateSelection(suggestionsList.getElementsByTagName('li'));
-
-      suggestionsList.style.display = 'block';
-      suggestionsList.classList.add('visible');
-      
-      // Add a class to the input when suggestions are shown
-      input.classList.add('suggestions-visible');
-      
-      adjustIframeHeight();
-
-      log('Suggestions list style after display:', {
-        display: suggestionsList.style.display,
-        visibility: window.getComputedStyle(suggestionsList).visibility,
-        offsetHeight: suggestionsList.offsetHeight,
-        scrollHeight: suggestionsList.scrollHeight,
-        classList: suggestionsList.classList
-      });
+  function handleKeyDown(e) {
+    if (!elements.suggestionsList.style.display || elements.suggestionsList.style.display === 'none') {
+      return;
     }
-  }
 
-  function highlightMatch(result) {
-    const { item, matches } = result;
-    let highlighted = item.name;
-    if (matches && matches.length > 0) {
-      matches.forEach(match => {
-        const indices = match.indices;
-        let offset = 0;
-        indices.forEach(([start, end]) => {
-          const before = highlighted.slice(0, start + offset);
-          const matchText = highlighted.slice(start + offset, end + offset + 1);
-          const after = highlighted.slice(end + offset + 1);
-          highlighted = `${before}<mark>${matchText}</mark>${after}`;
-          offset += '<mark></mark>'.length;
-        });
-      });
-    }
-    return highlighted;
-  }
+    const suggestions = elements.suggestionsList.getElementsByTagName('li');
 
-  function selectSuggestion(suggestion) {
-    if (suggestion && suggestion.item && suggestion.item.name) {
-      input.value = suggestion.item.name;
-      clearSuggestions();
-      input.focus();
-      if (typeof JFCustomWidget !== 'undefined') {
-        JFCustomWidget.sendData({ value: suggestion.item.name });
-        validateInput(suggestion.item.name);
-      }
-      console.log('Selected suggestion:', suggestion.item.name);
-    } else if (suggestion && suggestion.name) {
-      // Handle case where suggestion is directly the item
-      input.value = suggestion.name;
-      clearSuggestions();
-      input.focus();
-      if (typeof JFCustomWidget !== 'undefined') {
-        JFCustomWidget.sendData({ value: suggestion.name });
-        validateInput(suggestion.name);
-      }
-      console.log('Selected suggestion:', suggestion.name);
-    } else {
-      console.error('Invalid suggestion format:', suggestion);
-    }
-  }
-
-  function validateInput(value) {
-    if (typeof JFCustomWidget !== 'undefined') {
-      const isValid = value.trim().length > 0 && data.includes(value.trim());
-      JFCustomWidget.sendValid(isValid);
-    }
-  }
-
-  input.addEventListener('input', debounce((e) => {
-    onInputChange(e);
-    validateInput(e.target.value);
-  }, settings.debounceTime));
-
-  input.addEventListener('keydown', (e) => {
-    const items = suggestionsList.getElementsByTagName('li');
-    if (e.key === 'Enter') {
+    if (e.key === 'ArrowDown') {
       e.preventDefault();
-      if (items.length > 0 && selectedIndex >= 0 && selectedIndex < items.length) {
-        // Suggestion selected
-        const selectedSuggestion = currentSuggestions[selectedIndex];
-        if (selectedSuggestion) {
-          selectSuggestion(selectedSuggestion);
-        }
-      }
-    } else if (items.length > 0) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        selectedIndex = (selectedIndex + 1) % items.length;
-        updateSelection(items);
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        selectedIndex = (selectedIndex - 1 + items.length) % items.length;
-        updateSelection(items);
+      currentFocus++;
+      if (currentFocus >= suggestions.length) currentFocus = 0;
+      updateActiveSuggestion();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      currentFocus--;
+      if (currentFocus < 0) currentFocus = suggestions.length - 1;
+      updateActiveSuggestion();
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (currentFocus > -1) {
+        suggestions[currentFocus].click();
       }
     }
-  });
-
-  function updateSelection(items) {
-    Array.from(items).forEach((item, index) => {
-      item.classList.toggle('selected', index === selectedIndex);
-      if (index === selectedIndex) {
-        item.setAttribute('aria-selected', 'true');
-        item.scrollIntoView({ block: 'nearest' });
-        input.setAttribute('aria-activedescendant', item.id);
-      } else {
-        item.removeAttribute('aria-selected');
-      }
-    });
   }
 
-  // Modify the focus and blur event listeners
-  input.addEventListener('focus', () => {
-    if (input.value.length >= settings.minCharRequired) {
-      onInputChange({ target: input });
+  function updateActiveSuggestion() {
+    const suggestions = elements.suggestionsList.getElementsByTagName('li');
+    for (let i = 0; i < suggestions.length; i++) {
+      suggestions[i].classList.remove('active');
     }
-  });
+    if (currentFocus > -1 && currentFocus < suggestions.length) {
+      suggestions[currentFocus].classList.add('active');
+    }
+  }
 
-  input.addEventListener('blur', () => {
+  function handleSuggestionClick(event) {
+    if (event.target.tagName === 'LI') {
+      elements.input.value = event.target.textContent.replace(/<\/?mark>/g, '');
+      clearSuggestions();
+      validateInput(true);
+      elements.input.focus();
+    }
+  }
+
+  function handleError(error) {
+    console.error('Error:', error);
+    hideSpinner();
+    enableInput();
+    elements.input.placeholder = 'Error loading data. Please try again.';
+    validateInput(false);
+    window.parent.postMessage({ type: 'error', message: error.toString() }, '*');
+  }
+
+  const originalLog = console.log;
+  console.log = function(...args) {
+    originalLog.apply(console, args);
+    window.parent.postMessage({ type: 'log', message: args.join(' ') }, '*');
+  };
+
+  const originalError = console.error;
+  console.error = function(...args) {
+    originalError.apply(console, args);
+    window.parent.postMessage({ type: 'error', message: args.join(' ') }, '*');
+  };
+
+  function requestResize() {
+    const height = document.body.scrollHeight;
+    window.parent.postMessage({ type: 'resize', height: height }, '*');
+    if (typeof JFCustomWidget !== 'undefined') {
+      JFCustomWidget.requestFrameResize({
+        height: height
+      });
+    }
+  }
+
+  function handleBlur() {
+    // Use setTimeout to allow click events on suggestions to fire before clearing
     setTimeout(() => {
       clearSuggestions();
-    }, 150);
-  });
-
-  const debouncedAdjustIframeHeight = debounce((reset = false) => {
-    if (settings.dynamicResize) {
-      const inputHeight = 54; // Fixed input height
-      let totalHeight = inputHeight;
-
-      if (!reset && suggestionsList.style.display === 'block' && suggestionsList.children.length > 0) {
-        const suggestionsHeight = suggestionsList.scrollHeight;
-        totalHeight += suggestionsHeight + 3; // Added 3px buffer
-      }
-
-      // Send message to parent window to resize iframe
-      window.parent.postMessage({ type: 'resize', height: totalHeight }, '*');
-
-      // If not in JotForm, adjust the container height
-      const container = document.getElementById('autocompleteWidget');
-      if (container) {
-        container.style.height = `${totalHeight}px`;
-      }
-
-      log('Adjusted height:', totalHeight);
-    }
-  }, 16); // Debounce for approximately one frame (60 FPS)
-
-  function adjustIframeHeight(reset = false) {
-    debouncedAdjustIframeHeight(reset);
+    }, 200);
   }
 
-  // Initial iframe height adjustment
-  adjustIframeHeight(true);
-
-  // Add this event listener to prevent numeric input
-  input.addEventListener('keypress', function(e) {
-    const char = String.fromCharCode(e.which);
-    if (/[0-9]/.test(char)) {
-      e.preventDefault();
-    }
-  });
-}
-
-// Initialize the widget when the DOM is ready
-document.addEventListener('DOMContentLoaded', initializeWidget);
-
-// Add this at the end of main.js
-// SANDBOX START
-window.addEventListener('message', function(event) {
-  try {
-    if (event.data.type === 'updateSettings') {
-      log('Received updateSettings message', event.data.settings);
-      // Update the widget settings
-      Object.assign(defaultSettings, event.data.settings);
-      initializeWidget();
-    }
-  } catch (error) {
-    console.error('Error handling message event:', error);
-  }
-});
-// SANDBOX END
-
+  initWidget();
+})();
