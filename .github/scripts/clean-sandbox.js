@@ -15,6 +15,7 @@ filesToClean.forEach(file => {
 
     // Remove sandbox-specific code
     content = content.replace(/\/\/ SANDBOX START[\s\S]*?\/\/ SANDBOX END/g, '');
+    content = content.replace(/<!-- SANDBOX START[\s\S]*?SANDBOX END -->/g, '');
 
     // Remove empty lines
     content = content.replace(/^\s*[\r\n]/gm, '');

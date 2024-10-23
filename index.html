@@ -17,6 +17,7 @@
     <div id="error-message" style="color: red; display: none;"></div>
   </div>
   <script src="main.js"></script>
+  <!-- SANDBOX START -->
   <script>
     window.onerror = function(message, source, lineno, colno, error) {
       document.getElementById('error-message').textContent = 'Error: ' + message;
@@ -24,5 +25,6 @@
       console.error('Error:', error);
     };
   </script>
+  <!-- SANDBOX END -->
 </body>
 </html>

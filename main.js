@@ -441,6 +441,7 @@ if (typeof JFCustomWidget !== 'undefined') {
 }
 
 // Add this at the end of main.js
+// SANDBOX START
 window.addEventListener('message', function(event) {
     if (event.data.type === 'updateSettings') {
         // Update the widget settings
@@ -448,3 +449,4 @@ window.addEventListener('message', function(event) {
         initializeWidget();
     }
 });
+// SANDBOX END
