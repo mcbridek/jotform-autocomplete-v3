@@ -5,7 +5,7 @@ function log(message, data) {
 
 // Default settings from widget.json
 const defaultSettings = {
-  googleSheetId: "1wvF2zjzJnUVeXl3s7Njo0EEEW_WQ1phqEeTGY2Vw_AI",
+  googleSheetId: "1Xg_6DlbHku0zBiHhm54uDsubVpZDA5ELzl9rQcMS7j8  ",
   columnIndex: 1,
   placeholderText: "Start typing...",
   inputWidth: "100%",
@@ -49,15 +49,19 @@ async function fetchGoogleSheetData(sheetId) {
     if (sheetId === 'test') {
       data = await response.json();
       log('Fetched test data:', data);
-      return [['name', 'email']].concat(data.map(user => [user.name, user.email]));
+      return data.map(user => user.name); // Return only names for test data
     } else {
       const csvText = await response.text();
-      log('Fetched CSV data:', csvText);
+      log('Fetched CSV data length:', csvText.length);
       const rows = csvText.split('\n').map(row => 
         row.split(',').map(cell => cell.replace(/^"|"$/g, '').trim())
       );
-      log('Parsed CSV rows:', rows);
-      return rows;
+      // Extract only the second column (index 1)
+      const columnData = rows.slice(1).map(row => row[1] || '');
+      log('Total number of items:', columnData.length);
+      log('First 5 items:', columnData.slice(0, 5));
+      log('Last 5 items:', columnData.slice(-5));
+      return columnData;
     }
   } catch (error) {
     console.error('Error fetching data:', error);
@@ -77,6 +81,11 @@ function debounce(func, wait) {
 
 function getCorsProxyUrl(url) {
   return `https://cors-anywhere.herokuapp.com/${url}`;
+}
+
+// Add this function near the top of the file
+function dumpFullResults(data) {
+    window.parent.postMessage({ type: 'fullResults', results: data }, '*');
 }
 
 // Initialize the widget
@@ -118,6 +127,7 @@ async function initializeWidget() {
 
   if (data.length > 0) {
     initializeAutocomplete(input, suggestionsList, data, settings);
+    dumpFullResults(data); // Add this line to dump full results
   } else {
     console.error('No data retrieved from Google Sheet.');
   }
@@ -138,17 +148,23 @@ function initializeAutocomplete(input, suggestionsList, data, settings) {
     return;
   }
 
-  // Transform data into objects with 'name' property
-  const columnData = data.slice(1).map(row => ({ name: row[settings.columnIndex] || '' }));
+  log('Raw data received - total items:', data.length);
+  log('First 5 items of raw data:', data.slice(0, 5));
+  log('Last 5 items of raw data:', data.slice(-5));
 
-  log('Column data:', columnData);
+  // Data is already in the correct format, no need for transformation
+  const columnData = data.map(item => ({ name: item }));
+
+  log('Processed column data - total items:', columnData.length);
+  log('First 5 items of processed data:', columnData.slice(0, 5));
+  log('Last 5 items of processed data:', columnData.slice(-5));
 
   // Set up Fuse.js for fuzzy searching
   const fuse = new Fuse(columnData, {
     shouldSort: true,
     threshold: settings.threshold,
     distance: settings.distance,
-    minMatchCharLength: settings.minCharRequired, // This will now be 2
+    minMatchCharLength: settings.minCharRequired,
     keys: ['name'],
     includeScore: true,
     includeMatches: true
@@ -164,7 +180,16 @@ function initializeAutocomplete(input, suggestionsList, data, settings) {
   input.addEventListener('input', debounce(onInputChange, settings.debounceTime));
 
   function onInputChange(e) {
-    const searchTerm = e.target.value;
+    let searchTerm = e.target.value;
+    
+    // Remove any numeric characters from the input
+    searchTerm = searchTerm.replace(/[0-9]/g, '');
+    
+    // Update the input value if it changed
+    if (searchTerm !== e.target.value) {
+      e.target.value = searchTerm;
+    }
+
     log('Search term:', searchTerm);
 
     if (searchTerm.length >= settings.minCharRequired) {
@@ -173,7 +198,8 @@ function initializeAutocomplete(input, suggestionsList, data, settings) {
         displaySuggestions(searchCache[searchTerm]);
       } else {
         const results = fuse.search(searchTerm);
-        log('Fuse search results:', results);
+        log('Fuse search results (first 5):', results.slice(0, 5));
+        log('Total Fuse search results:', results.length);
         searchCache[searchTerm] = results;
         displaySuggestions(results);
       }
@@ -272,7 +298,8 @@ function initializeAutocomplete(input, suggestionsList, data, settings) {
       clearSuggestions();
       input.focus();
       if (typeof JFCustomWidget !== 'undefined') {
-        JFCustomWidget.sendSubmit({ value: suggestion.item.name, valid: true });
+        JFCustomWidget.sendData({ value: suggestion.item.name });
+        validateInput(suggestion.item.name);
       }
       console.log('Selected suggestion:', suggestion.item.name);
     } else if (suggestion && suggestion.name) {
@@ -281,13 +308,26 @@ function initializeAutocomplete(input, suggestionsList, data, settings) {
       clearSuggestions();
       input.focus();
       if (typeof JFCustomWidget !== 'undefined') {
-        JFCustomWidget.sendSubmit({ value: suggestion.name, valid: true });
+        JFCustomWidget.sendData({ value: suggestion.name });
+        validateInput(suggestion.name);
       }
       console.log('Selected suggestion:', suggestion.name);
     } else {
       console.error('Invalid suggestion format:', suggestion);
     }
   }
+
+  function validateInput(value) {
+    if (typeof JFCustomWidget !== 'undefined') {
+      const isValid = value.trim().length > 0 && data.includes(value.trim());
+      JFCustomWidget.sendValid(isValid);
+    }
+  }
+
+  input.addEventListener('input', debounce((e) => {
+    onInputChange(e);
+    validateInput(e.target.value);
+  }, settings.debounceTime));
 
   input.addEventListener('keydown', (e) => {
     const items = suggestionsList.getElementsByTagName('li');
@@ -368,6 +408,28 @@ function initializeAutocomplete(input, suggestionsList, data, settings) {
 
   // Initial iframe height adjustment
   adjustIframeHeight(true);
+
+  // Add this event listener to prevent numeric input
+  input.addEventListener('keypress', function(e) {
+    const char = String.fromCharCode(e.which);
+    if (/[0-9]/.test(char)) {
+      e.preventDefault();
+    }
+  });
+
+  // If JotForm is available, set up validation
+  if (typeof JFCustomWidget !== 'undefined') {
+    JFCustomWidget.subscribe('ready', function() {
+      const value = JFCustomWidget.getWidgetSettings().defaultValue;
+      input.value = value;
+      validateInput(value);
+    });
+
+    JFCustomWidget.subscribe('submit', function() {
+      const value = input.value.trim();
+      JFCustomWidget.sendSubmit({ value: value, valid: data.includes(value) });
+    });
+  }
 }
 
 // Initialize the widget when the DOM is ready

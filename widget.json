@@ -15,7 +15,7 @@
       "label": "Google Sheet ID",
       "description": "Enter the ID of your public Google Sheet.",
       "required": true,
-      "default": "1wvF2zjzJnUVeXl3s7Njo0EEEW_WQ1phqEeTGY2Vw_AI"
+      "default": "1Xg_6DlbHku0zBiHhm54uDsubVpZDA5ELzl9rQcMS7j8"
     },
     "columnIndex": {
       "type": "number",
