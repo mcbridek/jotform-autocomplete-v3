@@ -15,13 +15,13 @@
       "label": "Google Sheet ID",
       "description": "Enter the ID of your public Google Sheet.",
       "required": true,
-      "default": "1EqDyirzwOEhUm2u6uypgRhp2JDEEDcNBHc5rZYhulME"
+      "default": "1wvF2zjzJnUVeXl3s7Njo0EEEW_WQ1phqEeTGY2Vw_AI"
     },
     "columnIndex": {
       "type": "number",
       "label": "Column Index",
       "description": "Enter the zero-based index of the column to use for autocomplete (e.g., 0 for the first column).",
-      "default": 0
+      "default": 1
     },
     "placeholderText": {
       "type": "text",

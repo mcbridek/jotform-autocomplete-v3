@@ -1,27 +1,28 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Google Sheets Autocomplete Widget</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Google Sheets Autocomplete Widget</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>
 </head>
 <body>
-    <div id="widget-container">
-        <input 
-            type="text" 
-            id="autocomplete-input" 
-            placeholder="Start typing to search..."
-            aria-label="Search input"
-            aria-autocomplete="list"
-            aria-controls="suggestions-list"
-        >
-        <div id="loading-indicator" class="loading" style="display: none;"></div>
-        <div id="error-message" class="error-message" style="display: none;"></div>
-        <ul id="suggestions-list" role="listbox"></ul>
+  <div id="autocompleteWidget">
+    <div style="position: relative;">
+      <input type="text" id="autocomplete-input" aria-autocomplete="list" aria-haspopup="listbox">
+      <div id="spinner" class="spinner"></div>
     </div>
-
-    <script src="https://js.jotform.com/JotFormCustomWidget.min.js"></script>
-    <script type="module" src="main.js"></script>
+    <ul id="suggestions-list" role="listbox"></ul>
+    <div id="error-message" style="color: red; display: none;"></div>
+  </div>
+  <script src="main.js"></script>
+  <script>
+    window.onerror = function(message, source, lineno, colno, error) {
+      document.getElementById('error-message').textContent = 'Error: ' + message;
+      document.getElementById('error-message').style.display = 'block';
+      console.error('Error:', error);
+    };
+  </script>
 </body>
 </html>
