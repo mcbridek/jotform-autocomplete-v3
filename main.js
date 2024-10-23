@@ -24,10 +24,14 @@ const defaultSettings = {
 
 // Function to get settings, using defaults if JotForm is not available
 function getWidgetSetting(settingName, parseFunc = (val) => val) {
-  if (typeof JFCustomWidget !== 'undefined') {
-    const setting = JFCustomWidget.getWidgetSetting(settingName);
-    log(`Getting setting for ${settingName}:`, setting);
-    return setting !== undefined && setting !== '' ? parseFunc(setting) : defaultSettings[settingName];
+  try {
+    if (typeof JFCustomWidget !== 'undefined') {
+      const setting = JFCustomWidget.getWidgetSetting(settingName);
+      log(`Getting setting for ${settingName}:`, setting);
+      return setting !== undefined && setting !== '' ? parseFunc(setting) : defaultSettings[settingName];
+    }
+  } catch (error) {
+    console.error(`Error getting widget setting ${settingName}:`, error);
   }
   return defaultSettings[settingName];
 }
@@ -95,46 +99,51 @@ function dumpFullResults(data) {
 
 // Initialize the widget
 async function initializeWidget() {
-  const input = document.getElementById('autocomplete-input');
-  const suggestionsList = document.getElementById('suggestions-list');
-  const spinner = document.getElementById('spinner');
+  try {
+    log('Initializing widget');
+    const input = document.getElementById('autocomplete-input');
+    const suggestionsList = document.getElementById('suggestions-list');
+    const spinner = document.getElementById('spinner');
 
-  // Get widget settings
-  const settings = {
-    sheetId: getWidgetSetting('googleSheetId'),
-    columnIndex: getWidgetSetting('columnIndex', parseInt),
-    placeholderText: getWidgetSetting('placeholderText'),
-    inputWidth: getWidgetSetting('inputWidth'),
-    autocompleteWidth: getWidgetSetting('autocompleteWidth'),
-    dynamicResize: getWidgetSetting('dynamicResize'),
-    threshold: getWidgetSetting('threshold', parseFloat),
-    distance: getWidgetSetting('distance', parseInt),
-    maxResults: getWidgetSetting('maxResults', parseInt),
-    minCharRequired: getWidgetSetting('minCharRequired', parseInt),
-    debounceTime: getWidgetSetting('debounceTime', parseInt)
-  };
+    // Get widget settings
+    const settings = {
+      sheetId: getWidgetSetting('googleSheetId'),
+      columnIndex: getWidgetSetting('columnIndex', parseInt),
+      placeholderText: getWidgetSetting('placeholderText'),
+      inputWidth: getWidgetSetting('inputWidth'),
+      autocompleteWidth: getWidgetSetting('autocompleteWidth'),
+      dynamicResize: getWidgetSetting('dynamicResize'),
+      threshold: getWidgetSetting('threshold', parseFloat),
+      distance: getWidgetSetting('distance', parseInt),
+      maxResults: getWidgetSetting('maxResults', parseInt),
+      minCharRequired: getWidgetSetting('minCharRequired', parseInt),
+      debounceTime: getWidgetSetting('debounceTime', parseInt)
+    };
 
-  log('Widget settings:', settings);
+    log('Widget settings:', settings);
 
-  // Apply settings
-  applyWidgetSettings(input, suggestionsList, settings);
+    // Apply settings
+    applyWidgetSettings(input, suggestionsList, settings);
 
-  // Show spinner
-  spinner.style.display = 'block';
+    // Show spinner
+    spinner.style.display = 'block';
 
-  // Fetch data from Google Sheets
-  log('Fetching data from Google Sheet:', settings.sheetId);
-  const data = await fetchGoogleSheetData(settings.sheetId, settings.columnIndex);
-  log('Fetched data:', data);
+    // Fetch data from Google Sheets
+    log('Fetching data from Google Sheet:', settings.sheetId);
+    const data = await fetchGoogleSheetData(settings.sheetId, settings.columnIndex);
+    log('Fetched data:', data);
 
-  // Hide spinner
-  spinner.style.display = 'none';
+    // Hide spinner
+    spinner.style.display = 'none';
 
-  if (data.length > 0) {
-    initializeAutocomplete(input, suggestionsList, data, settings);
-    dumpFullResults(data); // Add this line to dump full results
-  } else {
-    console.error('No data retrieved from Google Sheet.');
+    if (data.length > 0) {
+      initializeAutocomplete(input, suggestionsList, data, settings);
+      dumpFullResults(data);
+    } else {
+      console.error('No data retrieved from Google Sheet.');
+    }
+  } catch (error) {
+    console.error('Error initializing widget:', error);
   }
 }
 
@@ -421,36 +430,6 @@ function initializeAutocomplete(input, suggestionsList, data, settings) {
       e.preventDefault();
     }
   });
-
-  // If JotForm is available, set up validation
-  if (typeof JFCustomWidget !== 'undefined') {
-    JFCustomWidget.subscribe('ready', function(data) {
-      log('JFCustomWidget ready event received', data);
-      const widgetSettings = JFCustomWidget.getWidgetSettings();
-      log('Widget settings from JotForm:', widgetSettings);
-      
-      // Update default settings with JotForm settings
-      Object.keys(defaultSettings).forEach(key => {
-        if (widgetSettings[key] !== undefined && widgetSettings[key] !== '') {
-          defaultSettings[key] = widgetSettings[key];
-        }
-      });
-      
-      log('Updated default settings:', defaultSettings);
-      
-      const input = document.getElementById('autocomplete-input');
-      input.value = widgetSettings.defaultValue || '';
-      validateInput(input.value);
-      initializeWidget(); // Re-initialize the widget with JotForm settings
-    });
-
-    JFCustomWidget.subscribe('submit', function() {
-      const input = document.getElementById('autocomplete-input');
-      const value = input.value.trim();
-      log('Submitting value to JotForm:', value);
-      JFCustomWidget.sendSubmit({ value: value, valid: true }); // Assume valid for now, adjust as needed
-    });
-  }
 }
 
 // Initialize the widget when the DOM is ready
@@ -459,11 +438,15 @@ document.addEventListener('DOMContentLoaded', initializeWidget);
 // Add this at the end of main.js
 // SANDBOX START
 window.addEventListener('message', function(event) {
+  try {
     if (event.data.type === 'updateSettings') {
-        log('Received updateSettings message', event.data.settings);
-        // Update the widget settings
-        Object.assign(defaultSettings, event.data.settings);
-        initializeWidget();
+      log('Received updateSettings message', event.data.settings);
+      // Update the widget settings
+      Object.assign(defaultSettings, event.data.settings);
+      initializeWidget();
     }
+  } catch (error) {
+    console.error('Error handling message event:', error);
+  }
 });
 // SANDBOX END
