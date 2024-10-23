@@ -1,0 +1,37 @@
+name: Clean Sandbox for Production
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize]
+
+jobs:
+  clean-sandbox:
+    if: github.head_ref == 'sandbox'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v2
+      with:
+        node-version: '14'
+
+    - name: Install dependencies
+      run: npm install
+
+    - name: Clean sandbox code
+      run: node .github/scripts/clean-sandbox.js
+
+    - name: Create Pull Request
+      uses: peter-evans/create-pull-request@v3
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        commit-message: Remove sandbox functionality
+        title: 'Remove sandbox functionality for production'
+        body: 'This PR removes sandbox functionality from the code.'
+        branch: clean-sandbox
+        base: main
