@@ -1,4 +1,12 @@
 (function() {
+  function getWidgetSetting(settingName, defaultValue, parseFunc = (val) => val) {
+    if (typeof JFCustomWidget !== "undefined") {
+      const setting = JFCustomWidget.getWidgetSetting(settingName);
+      return setting !== undefined && setting !== '' ? parseFunc(setting) : defaultValue;
+    }
+    return defaultValue;
+  }
+
   const defaultWidgetConfig = {
     googleSheetId: '1Xg_6DlbHku0zBiHhm54uDsubVpZDA5ELzl9rQcMS7j8',
     sheetName: 'FullList',
@@ -51,13 +59,28 @@
 
   function handleWidgetReady(data) {
     console.log('Widget ready, received data:', data);
-    // Merge default config with JotForm settings
-    widgetConfig = { ...defaultWidgetConfig, ...data };
+    // Use getWidgetSetting to retrieve settings
+    widgetConfig = {
+      googleSheetId: getWidgetSetting('googleSheetId', defaultWidgetConfig.googleSheetId),
+      sheetName: getWidgetSetting('sheetName', defaultWidgetConfig.sheetName),
+      columnIndex: getWidgetSetting('columnIndex', defaultWidgetConfig.columnIndex, parseInt),
+      debounceTime: getWidgetSetting('debounceTime', defaultWidgetConfig.debounceTime, parseInt),
+      maxResults: getWidgetSetting('maxResults', defaultWidgetConfig.maxResults, parseInt),
+      minCharRequired: getWidgetSetting('minCharRequired', defaultWidgetConfig.minCharRequired, parseInt),
+      threshold: getWidgetSetting('threshold', defaultWidgetConfig.threshold, parseFloat),
+      distance: getWidgetSetting('distance', defaultWidgetConfig.distance, parseInt),
+      tokenize: getWidgetSetting('tokenize', defaultWidgetConfig.tokenize, (val) => val === 'true'),
+      matchAllTokens: getWidgetSetting('matchAllTokens', defaultWidgetConfig.matchAllTokens, (val) => val === 'true'),
+      placeholderText: getWidgetSetting('placeholderText', defaultWidgetConfig.placeholderText),
+      inputWidth: getWidgetSetting('inputWidth', defaultWidgetConfig.inputWidth),
+      autocompleteWidth: getWidgetSetting('autocompleteWidth', defaultWidgetConfig.autocompleteWidth),
+      dynamicResize: getWidgetSetting('dynamicResize', defaultWidgetConfig.dynamicResize, (val) => val === 'true')
+    };
 
     // Apply settings to elements
-    elements.input.placeholder = widgetConfig.placeholderText || defaultWidgetConfig.placeholderText;
-    elements.input.style.width = widgetConfig.inputWidth || defaultWidgetConfig.inputWidth;
-    elements.suggestionsList.style.width = widgetConfig.autocompleteWidth || defaultWidgetConfig.autocompleteWidth;
+    elements.input.placeholder = widgetConfig.placeholderText;
+    elements.input.style.width = widgetConfig.inputWidth;
+    elements.suggestionsList.style.width = widgetConfig.autocompleteWidth;
     
     console.log('Fetching data from Google Sheets...');
     showSpinner();
@@ -308,13 +331,11 @@
 
   function requestResize() {
     const height = document.body.scrollHeight;
-    if (typeof JFCustomWidget !== 'undefined') {
+    if (typeof JFCustomWidget !== 'undefined' && widgetConfig.dynamicResize) {
       console.log('Requesting frame resize to height:', height);
-      JFCustomWidget.requestFrameResize({
-        height: height
-      });
+      JFCustomWidget.requestFrameResize({ height: height });
     } else {
-      console.warn('JFCustomWidget is not defined, unable to resize frame');
+      console.warn('JFCustomWidget is not defined or dynamic resize is disabled');
     }
   }
 
