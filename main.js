@@ -26,13 +26,14 @@ const defaultSettings = {
 function getWidgetSetting(settingName, parseFunc = (val) => val) {
   if (typeof JFCustomWidget !== 'undefined') {
     const setting = JFCustomWidget.getWidgetSetting(settingName);
+    log(`Getting setting for ${settingName}:`, setting);
     return setting !== undefined && setting !== '' ? parseFunc(setting) : defaultSettings[settingName];
   }
   return defaultSettings[settingName];
 }
 
 // Function to fetch data from a public Google Sheet (CSV format)
-async function fetchGoogleSheetData(sheetId) {
+async function fetchGoogleSheetData(sheetId, columnIndex) {
   const corsProxy = 'https://cors-anywhere.herokuapp.com/';
   const url = sheetId === 'test' 
     ? 'https://jsonplaceholder.typicode.com/users'
@@ -61,7 +62,7 @@ async function fetchGoogleSheetData(sheetId) {
         row.split(',').map(cell => cell.replace(/^"|"$/g, '').trim())
       );
       // Extract only the second column (index 1)
-      const columnData = rows.slice(1).map(row => row[1] || '');
+      const columnData = rows.slice(1).map(row => row[columnIndex] || '');
       log('Total number of items:', columnData.length);
       log('First 5 items:', columnData.slice(0, 5));
       log('Last 5 items:', columnData.slice(-5));
@@ -122,8 +123,8 @@ async function initializeWidget() {
   spinner.style.display = 'block';
 
   // Fetch data from Google Sheets
-  console.log('Fetching data from Google Sheet:', settings.sheetId);
-  const data = await fetchGoogleSheetData(settings.sheetId);
+  log('Fetching data from Google Sheet:', settings.sheetId);
+  const data = await fetchGoogleSheetData(settings.sheetId, settings.columnIndex);
   log('Fetched data:', data);
 
   // Hide spinner
@@ -423,13 +424,23 @@ function initializeAutocomplete(input, suggestionsList, data, settings) {
 
   // If JotForm is available, set up validation
   if (typeof JFCustomWidget !== 'undefined') {
-    JFCustomWidget.subscribe('ready', function() {
-      log('JFCustomWidget ready event received');
-      const value = JFCustomWidget.getWidgetSettings().defaultValue;
-      log('Default value from JotForm:', value);
+    JFCustomWidget.subscribe('ready', function(data) {
+      log('JFCustomWidget ready event received', data);
+      const widgetSettings = JFCustomWidget.getWidgetSettings();
+      log('Widget settings from JotForm:', widgetSettings);
+      
+      // Update default settings with JotForm settings
+      Object.keys(defaultSettings).forEach(key => {
+        if (widgetSettings[key] !== undefined && widgetSettings[key] !== '') {
+          defaultSettings[key] = widgetSettings[key];
+        }
+      });
+      
+      log('Updated default settings:', defaultSettings);
+      
       const input = document.getElementById('autocomplete-input');
-      input.value = value;
-      validateInput(value);
+      input.value = widgetSettings.defaultValue || '';
+      validateInput(input.value);
       initializeWidget(); // Re-initialize the widget with JotForm settings
     });
 
@@ -445,15 +456,11 @@ function initializeAutocomplete(input, suggestionsList, data, settings) {
 // Initialize the widget when the DOM is ready
 document.addEventListener('DOMContentLoaded', initializeWidget);
 
-// If JotForm is available, also initialize on 'ready' event
-if (typeof JFCustomWidget !== 'undefined') {
-  JFCustomWidget.subscribe('ready', initializeWidget);
-}
-
 // Add this at the end of main.js
 // SANDBOX START
 window.addEventListener('message', function(event) {
     if (event.data.type === 'updateSettings') {
+        log('Received updateSettings message', event.data.settings);
         // Update the widget settings
         Object.assign(defaultSettings, event.data.settings);
         initializeWidget();

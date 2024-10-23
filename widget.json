@@ -15,19 +15,22 @@
       "label": "Google Sheet ID",
       "description": "Enter the ID of your public Google Sheet.",
       "required": true,
-      "default": "1Xg_6DlbHku0zBiHhm54uDsubVpZDA5ELzl9rQcMS7j8"
+      "default": "1Xg_6DlbHku0zBiHhm54uDsubVpZDA5ELzl9rQcMS7j8",
+      "value": "1Xg_6DlbHku0zBiHhm54uDsubVpZDA5ELzl9rQcMS7j8"
     },
     "columnIndex": {
       "type": "number",
       "label": "Column Index",
       "description": "Enter the zero-based index of the column to use for autocomplete (e.g., 0 for the first column).",
-      "default": 1
+      "default": 1,
+      "value": 1
     },
     "placeholderText": {
       "type": "text",
       "label": "Placeholder Text",
       "description": "Specify the placeholder text for the input field.",
-      "default": "Start typing..."
+      "default": "Start typing...",
+      "value": "Start typing..."
     },
     "inputWidth": {
       "type": "text",
