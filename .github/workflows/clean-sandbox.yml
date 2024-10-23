@@ -13,9 +13,6 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v2
-      with:
-        fetch-depth: 0
-        token: ${{ secrets.PAT }}
 
     - name: Set up Node.js
       uses: actions/setup-node@v2
@@ -39,15 +36,15 @@ jobs:
         git commit -m "Remove sandbox functionality" || echo "No changes to commit"
 
     - name: Push changes
-      env:
-        GITHUB_TOKEN: ${{ secrets.PAT }}
-      run: |
-        git push origin HEAD:clean-sandbox || (git push origin --delete clean-sandbox && git push origin HEAD:clean-sandbox)
+      uses: ad-m/github-push-action@master
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        branch: clean-sandbox
 
     - name: Create Pull Request
       uses: peter-evans/create-pull-request@v3
       with:
-        token: ${{ secrets.PAT }}
+        token: ${{ secrets.GITHUB_TOKEN }}
         commit-message: Remove sandbox functionality
         title: 'Remove sandbox functionality for production'
         body: 'This PR removes sandbox functionality from the code.'
