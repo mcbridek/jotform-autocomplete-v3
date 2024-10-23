@@ -1,5 +1,0 @@
-{
-  "scripts": {
-    "clean-sandbox": "node .github/scripts/clean-sandbox.js"
-  }
-}
