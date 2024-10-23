@@ -330,10 +330,15 @@
   };
 
   function requestResize() {
-    const height = document.body.scrollHeight;
     if (typeof JFCustomWidget !== 'undefined' && widgetConfig.dynamicResize) {
-      console.log('Requesting frame resize to height:', height);
-      JFCustomWidget.requestFrameResize({ height: height });
+      const inputHeight = elements.input.offsetHeight;
+      const suggestionsHeight = elements.suggestionsList.style.display === 'block' ? elements.suggestionsList.offsetHeight : 0;
+      const totalHeight = inputHeight + suggestionsHeight + 20; // Adding 20px for padding
+
+      console.log('Requesting frame resize to height:', totalHeight);
+      JFCustomWidget.requestFrameResize({
+        height: totalHeight
+      });
     } else {
       console.warn('JFCustomWidget is not defined or dynamic resize is disabled');
     }
