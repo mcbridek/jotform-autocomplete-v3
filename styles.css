@@ -8,7 +8,7 @@ body {
 #autocompleteWidget {
   position: relative;
   width: 100%;
-  overflow: hidden; /* Add this to prevent scrollbar */
+  overflow: hidden;
 }
 
 #autocomplete-input {
@@ -89,7 +89,7 @@ body {
   margin-bottom: 20px;
 }
 
-// SANDBOX START
+/* SANDBOX START */
 #googleSheetsComponent {
     font-family: Arial, sans-serif;
     max-width: 800px;
@@ -158,5 +158,4 @@ body {
   0% { transform: translateY(-50%) rotate(0deg); }
   100% { transform: translateY(-50%) rotate(360deg); }
 }
-
-// SANDBOX END
+/* SANDBOX END */

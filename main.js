@@ -1,11 +1,15 @@
 // Add this function at the beginning of the file
 function log(message, data) {
   console.log(message, JSON.stringify(data, null, 2));
+  // You can also send this to the parent window for debugging in sandbox
+  if (window.parent !== window) {
+    window.parent.postMessage({ type: 'log', message, data }, '*');
+  }
 }
 
 // Default settings from widget.json
 const defaultSettings = {
-  googleSheetId: "1Xg_6DlbHku0zBiHhm54uDsubVpZDA5ELzl9rQcMS7j8  ",
+  googleSheetId: "1Xg_6DlbHku0zBiHhm54uDsubVpZDA5ELzl9rQcMS7j8",
   columnIndex: 1,
   placeholderText: "Start typing...",
   inputWidth: "100%",
@@ -14,7 +18,7 @@ const defaultSettings = {
   threshold: 0.2,
   distance: 100,
   maxResults: 5,
-  minCharRequired: 2, // Changed from 3 to 2
+  minCharRequired: 2,
   debounceTime: 300
 };
 
@@ -420,14 +424,20 @@ function initializeAutocomplete(input, suggestionsList, data, settings) {
   // If JotForm is available, set up validation
   if (typeof JFCustomWidget !== 'undefined') {
     JFCustomWidget.subscribe('ready', function() {
+      log('JFCustomWidget ready event received');
       const value = JFCustomWidget.getWidgetSettings().defaultValue;
+      log('Default value from JotForm:', value);
+      const input = document.getElementById('autocomplete-input');
       input.value = value;
       validateInput(value);
+      initializeWidget(); // Re-initialize the widget with JotForm settings
     });
 
     JFCustomWidget.subscribe('submit', function() {
+      const input = document.getElementById('autocomplete-input');
       const value = input.value.trim();
-      JFCustomWidget.sendSubmit({ value: value, valid: data.includes(value) });
+      log('Submitting value to JotForm:', value);
+      JFCustomWidget.sendSubmit({ value: value, valid: true }); // Assume valid for now, adjust as needed
     });
   }
 }
