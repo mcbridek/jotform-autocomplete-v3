@@ -1,17 +1,22 @@
 (function() {
-  const widgetConfig = {
-    defaultSpreadsheetId: 'your_default_spreadsheet_id_here',
-    sheetName: 'Sheet1',
-    columnIndex: 1, // Always use the second column
+  const defaultWidgetConfig = {
+    googleSheetId: '1Xg_6DlbHku0zBiHhm54uDsubVpZDA5ELzl9rQcMS7j8',
+    sheetName: 'FullList',
+    columnIndex: 1,
     debounceTime: 300,
     maxResults: 5,
-    minCharRequired: 3, // Changed from 2 to 3
-    threshold: 0.4, // Increased threshold for more lenient matching
+    minCharRequired: 3,
+    threshold: 0.4,
     distance: 100,
-    tokenize: true, // Enable tokenization
-    matchAllTokens: true // Require all tokens to match
+    tokenize: true,
+    matchAllTokens: true,
+    placeholderText: 'Begin te typen...',
+    inputWidth: '100%',
+    autocompleteWidth: '100%',
+    dynamicResize: true
   };
 
+  let widgetConfig = { ...defaultWidgetConfig };
   let fuseInstance;
   let debounceTimer;
   let currentFocus = -1;
@@ -23,40 +28,35 @@
   };
 
   function initWidget() {
-    window.addEventListener('message', handleMessage);
+    if (typeof JFCustomWidget !== "undefined") {
+      JFCustomWidget.subscribe("ready", handleWidgetReady);
+      JFCustomWidget.subscribe("submit", handleSubmit);
+    } else {
+      console.warn("JFCustomWidget is not defined. Running in standalone mode.");
+      handleWidgetReady({ settings: {} });
+    }
+
     elements.input.addEventListener('input', handleInput);
     elements.input.addEventListener('keydown', handleKeyDown);
-    elements.input.addEventListener('blur', handleBlur); // Add blur event listener
+    elements.input.addEventListener('blur', handleBlur);
     elements.suggestionsList.addEventListener('click', handleSuggestionClick);
     
-    // Disable input field initially
     disableInput();
-    
-    // Add JotForm Custom Widget initialization
-    if (typeof JFCustomWidget !== "undefined") {
-      JFCustomWidget.subscribe("ready", function(data) {
-        // Widget is ready, you can access data.settings here if needed
-        handleWidgetReady(data);
-      });
-    }
-  }
-
-  function handleMessage(event) {
-    if (event.data.type === 'updateSettings') {
-      handleWidgetReady(event.data);
-    }
   }
 
   function handleWidgetReady(data) {
-    const config = { ...widgetConfig, ...data.settings };
-    elements.input.placeholder = config.placeholderText || 'Begin te typen...';
-    elements.input.style.width = config.inputWidth || '100%';
-    elements.suggestionsList.style.width = config.autocompleteWidth || '100%';
+    // Merge default config with JotForm settings
+    widgetConfig = { ...defaultWidgetConfig, ...data.settings };
+
+    // Apply settings to elements
+    elements.input.placeholder = widgetConfig.placeholderText;
+    elements.input.style.width = widgetConfig.inputWidth;
+    elements.suggestionsList.style.width = widgetConfig.autocompleteWidth;
     
     console.log('Fetching data from Google Sheets...');
     showSpinner();
     disableInput();
-    fetchGoogleSheetsData(config.googleSheetId, config.sheetName)
+    fetchGoogleSheetsData(widgetConfig.googleSheetId, widgetConfig.sheetName)
       .then(data => {
         console.log('Data fetched successfully:', data);
         const processedData = processSheetData(data);
@@ -65,6 +65,15 @@
         enableInput();
       })
       .catch(handleError);
+  }
+
+  function handleSubmit() {
+    const value = elements.input.value;
+    const isValid = value.length >= widgetConfig.minCharRequired;
+    JFCustomWidget.sendSubmit({
+      valid: isValid,
+      value: value
+    });
   }
 
   function disableInput() {
@@ -260,6 +269,13 @@
       clearSuggestions();
       validateInput(true);
       elements.input.focus();
+      
+      // Notify JotForm of the selected value
+      if (typeof JFCustomWidget !== "undefined") {
+        JFCustomWidget.sendData({
+          value: elements.input.value
+        });
+      }
     }
   }
 

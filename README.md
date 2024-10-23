@@ -142,3 +142,49 @@ JFCustomWidget.subscribe("submit", function() {
 - **Jotform Developer API Documentation**: API Docs
 - **Jotform Custom Widget Sample Projects**: Sample Widgets
 
+## Maintenance Guidelines
+
+When making changes to the Google Sheets Autocomplete Widget, please keep the following points in mind to ensure stability and proper functionality:
+
+1. **Configuration Parameters**: 
+   - Always maintain the `defaultWidgetConfig` object in `main.js`.
+   - Ensure any new configurable parameters are added to both `defaultWidgetConfig` and the JotForm widget settings.
+
+2. **Google Sheets Integration**:
+   - The widget relies on a specific Google Sheets structure. Ensure any changes to the data fetching or processing logic in `fetchGoogleSheetsData()` and `processSheetData()` functions are compatible with the expected sheet format.
+   - Remember that the widget uses the second column (index 1) of the Google Sheet by default. If this changes, update the `columnIndex` in the configuration.
+
+3. **CORS Handling**:
+   - The widget uses a CORS proxy (cors-anywhere) for development. Ensure a proper solution is implemented for production use.
+
+4. **JotForm Integration**:
+   - Always test changes with the JotForm Custom Widget API (`JFCustomWidget`).
+   - Maintain proper error handling and validation to ensure the widget communicates correctly with JotForm.
+
+5. **Fuzzy Search**:
+   - The widget uses Fuse.js for fuzzy searching. If modifying search logic, ensure Fuse.js options in `initFuse()` are adjusted accordingly.
+
+6. **UI/UX Considerations**:
+   - Maintain accessibility features (ARIA attributes, keyboard navigation).
+   - Ensure the widget is responsive and works well on different screen sizes.
+
+7. **Performance**:
+   - Keep the debounce functionality for input handling to prevent excessive API calls.
+   - Be mindful of the widget's performance impact, especially when dealing with large datasets.
+
+8. **Testing**:
+   - Always test in both the sandbox environment and within a JotForm form.
+   - Test with various Google Sheets configurations and data sizes.
+   - Verify all features: autocomplete, validation, form submission, etc.
+
+9. **Browser Compatibility**:
+   - Ensure changes are compatible with all major browsers.
+
+10. **Version Control**:
+    - Document significant changes in a CHANGELOG.md file.
+    - Use semantic versioning for releases.
+
+11. **Dependencies**:
+    - Keep external dependencies (like Fuse.js) updated, but always test thoroughly after updates.
+
+By following these guidelines, you can help ensure that the widget remains stable, functional, and easy to maintain as it evolves.
