@@ -1,14 +1,12 @@
-name: Clean Sandbox for Production
+name: Prepare Pre-Deployment Branch
 
 on:
-  pull_request:
+  push:
     branches:
-      - main
-    types: [opened, synchronize]
+      - Development
 
 jobs:
-  clean-sandbox:
-    if: github.head_ref == 'sandbox'
+  prepare-pre-deployment:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
@@ -35,25 +33,25 @@ jobs:
     - name: Commit changes
       run: |
         git add -A
-        git commit -m "Remove sandbox functionality for production" || echo "No changes to commit"
+        git commit -m "Prepare pre-deployment code" || echo "No changes to commit"
 
-    - name: Push changes to temporary branch
+    - name: Push changes to Pre-Dep branch
       run: |
-        git checkout -b temp-clean-sandbox
-        git push origin temp-clean-sandbox --force
+        git checkout -B Pre-Dep
+        git push origin Pre-Dep --force
 
-    - name: Create Pull Request
+    - name: Create Pull Request to Pre-Dep
       uses: peter-evans/create-pull-request@v3
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
-        commit-message: Remove sandbox functionality for production
-        title: 'Production: Remove sandbox functionality'
+        commit-message: Update Pre-Deployment code
+        title: 'Update Pre-Deployment code'
         body: |
-          This PR removes sandbox functionality from the code for production deployment.
+          This PR updates the Pre-Deployment branch with the latest cleaned code from Development.
           Please review the changes and merge if everything looks correct.
-        branch: temp-clean-sandbox
-        base: main
-        labels: production, automated-pr
+        branch: Pre-Dep
+        base: Pre-Dep
+        labels: pre-deployment, automated-pr
 
     - name: Check outputs
       run: |
