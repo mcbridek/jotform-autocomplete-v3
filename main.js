@@ -28,12 +28,17 @@
   };
 
   function initWidget() {
+    console.log('Initializing widget...');
     if (typeof JFCustomWidget !== "undefined") {
-      JFCustomWidget.subscribe("ready", handleWidgetReady);
+      console.log('JFCustomWidget is defined, subscribing to events...');
+      JFCustomWidget.subscribe("ready", function(data) {
+        console.log('Received ready event with data:', data);
+        handleWidgetReady(data);
+      });
       JFCustomWidget.subscribe("submit", handleSubmit);
     } else {
       console.warn("JFCustomWidget is not defined. Running in standalone mode.");
-      handleWidgetReady({ settings: {} });
+      handleWidgetReady({});
     }
 
     elements.input.addEventListener('input', handleInput);
@@ -45,13 +50,14 @@
   }
 
   function handleWidgetReady(data) {
+    console.log('Widget ready, received data:', data);
     // Merge default config with JotForm settings
-    widgetConfig = { ...defaultWidgetConfig, ...data.settings };
+    widgetConfig = { ...defaultWidgetConfig, ...data };
 
     // Apply settings to elements
-    elements.input.placeholder = widgetConfig.placeholderText;
-    elements.input.style.width = widgetConfig.inputWidth;
-    elements.suggestionsList.style.width = widgetConfig.autocompleteWidth;
+    elements.input.placeholder = widgetConfig.placeholderText || defaultWidgetConfig.placeholderText;
+    elements.input.style.width = widgetConfig.inputWidth || defaultWidgetConfig.inputWidth;
+    elements.suggestionsList.style.width = widgetConfig.autocompleteWidth || defaultWidgetConfig.autocompleteWidth;
     
     console.log('Fetching data from Google Sheets...');
     showSpinner();
@@ -302,11 +308,13 @@
 
   function requestResize() {
     const height = document.body.scrollHeight;
-    window.parent.postMessage({ type: 'resize', height: height }, '*');
     if (typeof JFCustomWidget !== 'undefined') {
+      console.log('Requesting frame resize to height:', height);
       JFCustomWidget.requestFrameResize({
         height: height
       });
+    } else {
+      console.warn('JFCustomWidget is not defined, unable to resize frame');
     }
   }
 
