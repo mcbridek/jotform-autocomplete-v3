@@ -11,7 +11,8 @@ jobs:
     if: github.head_ref == 'sandbox'
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - name: Checkout code
+      uses: actions/checkout@v2
       with:
         fetch-depth: 0
 
@@ -26,6 +27,20 @@ jobs:
     - name: Clean sandbox code
       run: node .github/scripts/clean-sandbox.js
 
+    - name: Configure Git
+      run: |
+        git config user.name github-actions
+        git config user.email github-actions@github.com
+
+    - name: Commit changes
+      run: |
+        git add -A
+        git commit -m "Remove sandbox functionality" || echo "No changes to commit"
+
+    - name: Push changes
+      run: |
+        git push origin HEAD:clean-sandbox || (git push origin --delete clean-sandbox && git push origin HEAD:clean-sandbox)
+
     - name: Create Pull Request
       uses: peter-evans/create-pull-request@v3
       with:
@@ -35,3 +50,10 @@ jobs:
         body: 'This PR removes sandbox functionality from the code.'
         branch: clean-sandbox
         base: main
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Check outputs
+      run: |
+        echo "Pull Request Number - ${{ steps.cpr.outputs.pull-request-number }}"
+        echo "Pull Request URL - ${{ steps.cpr.outputs.pull-request-url }}"
