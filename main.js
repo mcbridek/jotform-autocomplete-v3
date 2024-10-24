@@ -37,90 +37,63 @@
 
   function initWidget() {
     console.log('Initializing widget...');
+    
+    // Initialize JotForm Widget
     if (typeof JFCustomWidget !== "undefined") {
-      // Subscribe to ready event first, as per guidelines
+      console.log('JFCustomWidget found, initializing...');
       JFCustomWidget.subscribe("ready", function(data) {
-        console.log('Received ready event with data:', data);
-        // Get settings using getWidgetSetting as recommended
+        console.log('JFCustomWidget ready event received:', data);
         const settings = {
           googleSheetId: JFCustomWidget.getWidgetSetting('googleSheetId'),
           sheetName: JFCustomWidget.getWidgetSetting('sheetName'),
-          columnIndex: parseInt(JFCustomWidget.getWidgetSetting('columnIndex')),
+          columnIndex: parseInt(JFCustomWidget.getWidgetSetting('columnIndex')) || 1,
           placeholderText: JFCustomWidget.getWidgetSetting('placeholderText'),
-          minCharRequired: parseInt(JFCustomWidget.getWidgetSetting('minCharRequired')),
-          maxResults: parseInt(JFCustomWidget.getWidgetSetting('maxResults'))
+          minCharRequired: parseInt(JFCustomWidget.getWidgetSetting('minCharRequired')) || 3,
+          maxResults: parseInt(JFCustomWidget.getWidgetSetting('maxResults')) || 5
         };
-        handleWidgetReady(settings);
+        
+        // Log the retrieved settings
+        console.log('Retrieved settings:', settings);
+        
+        // Apply settings and initialize
+        handleWidgetReady({ settings: settings });
       });
 
-      // Subscribe to submit event
-      JFCustomWidget.subscribe("submit", function() {
-        const value = elements.input.value;
-        const isValid = value.length >= widgetConfig.minCharRequired;
-        // Use sendSubmit as recommended
-        JFCustomWidget.sendSubmit({
-          valid: isValid,
-          value: value
-        });
-      });
+      JFCustomWidget.subscribe("submit", handleSubmit);
     } else {
-      console.warn("JFCustomWidget is not defined. Running in standalone mode.");
-      handleWidgetReady({});
+      // Standalone mode (sandbox)
+      console.warn("JFCustomWidget not found, running in standalone mode");
+      handleWidgetReady({ settings: defaultWidgetConfig });
     }
 
+    // Add event listeners
     elements.input.addEventListener('input', handleInput);
     elements.input.addEventListener('keydown', handleKeyDown);
     elements.input.addEventListener('blur', handleBlur);
     elements.suggestionsList.addEventListener('click', handleSuggestionClick);
-    
-    disableInput();
   }
 
   function handleWidgetReady(data) {
-    console.log('Widget ready, received data:', data);
+    console.log('handleWidgetReady called with data:', data);
     
-    // Use getWidgetSetting for each setting
+    // Merge settings with defaults
     widgetConfig = {
-      googleSheetId: JFCustomWidget.getWidgetSetting('googleSheetId'),
-      sheetName: JFCustomWidget.getWidgetSetting('sheetName'),
-      columnIndex: parseInt(JFCustomWidget.getWidgetSetting('columnIndex')),
-      placeholderText: JFCustomWidget.getWidgetSetting('placeholderText'),
-      minCharRequired: parseInt(JFCustomWidget.getWidgetSetting('minCharRequired')),
-      maxResults: parseInt(JFCustomWidget.getWidgetSetting('maxResults')),
-      // Keep other settings as defaults
-      debounceTime: defaultWidgetConfig.debounceTime,
-      threshold: defaultWidgetConfig.threshold,
-      distance: defaultWidgetConfig.distance,
-      tokenize: defaultWidgetConfig.tokenize,
-      matchAllTokens: defaultWidgetConfig.matchAllTokens,
-      inputWidth: defaultWidgetConfig.inputWidth,
-      autocompleteWidth: defaultWidgetConfig.autocompleteWidth,
-      dynamicResize: defaultWidgetConfig.dynamicResize
+      ...defaultWidgetConfig,
+      ...data.settings
     };
 
-    // Use default values if settings are undefined
-    Object.keys(widgetConfig).forEach(key => {
-      if (widgetConfig[key] === undefined || widgetConfig[key] === '') {
-        widgetConfig[key] = defaultWidgetConfig[key];
-      }
-    });
+    console.log('Final widget config:', widgetConfig);
 
-    console.log('Widget config after applying settings:', widgetConfig);
-    applySettings();
-    fetchData();
-  }
-
-  function applySettings() {
+    // Apply settings
     elements.input.placeholder = widgetConfig.placeholderText;
     elements.input.style.width = widgetConfig.inputWidth;
     elements.suggestionsList.style.width = widgetConfig.autocompleteWidth;
-    requestResize();
-  }
 
-  function fetchData() {
-    console.log('Fetching data from Google Sheets...');
+    // Start data fetch
+    console.log('Starting data fetch...');
     showSpinner();
     disableInput();
+
     fetchGoogleSheetsData(widgetConfig.googleSheetId, widgetConfig.sheetName)
       .then(data => {
         console.log('Data fetched successfully:', data);
@@ -130,7 +103,10 @@
         enableInput();
         requestResize();
       })
-      .catch(handleError);
+      .catch(error => {
+        console.error('Error fetching data:', error);
+        handleError(error);
+      });
   }
 
   function handleSubmit() {
@@ -374,13 +350,15 @@
     enableInput();
     elements.input.placeholder = 'Error loading data. Please try again.';
     elements.input.title = error.message;
-    validateInput(false);
+    
     if (typeof JFCustomWidget !== "undefined") {
       JFCustomWidget.sendData({
         valid: false,
-        value: ''
+        value: '',
+        message: error.message
       });
     }
+    
     requestResize();
   }
 
@@ -401,14 +379,15 @@
     const suggestionsHeight = elements.suggestionsList.style.display === 'block' 
       ? elements.suggestionsList.offsetHeight 
       : 0;
-    const padding = 20; // Add some padding
+    const padding = 20;
     return inputHeight + suggestionsHeight + padding;
   }
 
   function requestResize() {
-    if (typeof JFCustomWidget !== 'undefined' && widgetConfig.dynamicResize) {
-      const height = calculateTotalHeight();
-      // Use requestFrameResize as recommended
+    const height = calculateTotalHeight();
+    console.log('Requesting resize to height:', height);
+    
+    if (typeof JFCustomWidget !== "undefined") {
       JFCustomWidget.requestFrameResize({
         height: height
       });
