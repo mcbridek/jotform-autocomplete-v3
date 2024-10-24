@@ -167,3 +167,14 @@ directFetchButton.onclick = async () => {
     }
 };
 document.querySelector('.settings-form').appendChild(directFetchButton);
+
+// Add cache control button
+const clearCacheButton = document.createElement('button');
+clearCacheButton.textContent = 'Clear Cache';
+clearCacheButton.onclick = () => {
+    logToConsole('Clearing cache...');
+    widgetFrame.contentWindow.postMessage({
+        type: 'clearCache'
+    }, '*');
+};
+document.querySelector('.settings-form').appendChild(clearCacheButton);

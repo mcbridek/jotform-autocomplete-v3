@@ -29,33 +29,78 @@ const WidgetConfig = {
     }
 };
 
-// API Service
+// API Service with caching
 const GoogleSheetsAPI = {
     baseUrl: 'https://script.google.com/macros/s/',
+    cache: new Map(),
+    cacheExpiry: 5 * 60 * 1000, // 5 minutes in milliseconds
     
     async fetchData(sheetName) {
+        // Check cache first
+        const cachedData = this.getFromCache(sheetName);
+        if (cachedData) {
+            console.log('Returning cached data for:', sheetName);
+            return cachedData;
+        }
+        
         const scriptId = WidgetConfig.get('scriptId');
         const url = `${this.baseUrl}${scriptId}/exec?path=${encodeURIComponent(sheetName)}`;
         console.log('Fetching from URL:', url);
         
-        const response = await fetch(url, {
-            method: 'GET',
-            mode: 'cors',
-            headers: { 'Accept': 'application/json' }
+        try {
+            const response = await fetch(url, {
+                method: 'GET',
+                mode: 'cors',
+                headers: { 'Accept': 'application/json' }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const text = await response.text();
+            const jsonData = JSON.parse(text);
+            
+            if (!Array.isArray(jsonData)) {
+                throw new Error('Invalid data format received - not an array');
+            }
+            
+            const transformedData = this.transformData(jsonData);
+            
+            // Cache the transformed data
+            this.setInCache(sheetName, transformedData);
+            
+            return transformedData;
+        } catch (error) {
+            // If fetch fails, try to return stale cache
+            const staleData = this.getFromCache(sheetName, true);
+            if (staleData) {
+                console.log('Returning stale cached data due to fetch error');
+                return staleData;
+            }
+            throw error;
+        }
+    },
+    
+    getFromCache(sheetName, allowStale = false) {
+        const cached = this.cache.get(sheetName);
+        if (!cached) return null;
+        
+        const isExpired = Date.now() - cached.timestamp > this.cacheExpiry;
+        if (isExpired && !allowStale) return null;
+        
+        return cached.data;
+    },
+    
+    setInCache(sheetName, data) {
+        this.cache.set(sheetName, {
+            data,
+            timestamp: Date.now()
         });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        const text = await response.text();
-        const jsonData = JSON.parse(text);
-        
-        if (!Array.isArray(jsonData)) {
-            throw new Error('Invalid data format received - not an array');
-        }
-        
-        return this.transformData(jsonData);
+    },
+    
+    clearCache() {
+        this.cache.clear();
     },
     
     transformData(jsonData) {
@@ -321,7 +366,18 @@ const WidgetController = {
     },
     
     async initStandaloneMode() {
+        // Start preloading data immediately
+        const preloadPromise = GoogleSheetsAPI.fetchData(WidgetConfig.defaults.sheetName);
+        
+        // Continue with normal initialization
         await this.handleWidgetReady({ settings: WidgetConfig.defaults });
+        
+        // Wait for preload to complete in background
+        try {
+            await preloadPromise;
+        } catch (error) {
+            console.warn('Preload failed:', error);
+        }
     },
     
     async handleWidgetReady(data) {
@@ -332,7 +388,22 @@ const WidgetController = {
         UIManager.disableInput();
         
         try {
-            const data = await GoogleSheetsAPI.fetchData(WidgetConfig.get('sheetName'));
+            // Keep trying to fetch data until successful
+            let attempts = 0;
+            let data;
+            
+            while (!data) {
+                try {
+                    attempts++;
+                    console.log(`Fetch attempt ${attempts}...`);
+                    data = await GoogleSheetsAPI.fetchData(WidgetConfig.get('sheetName'));
+                } catch (error) {
+                    console.warn(`Attempt ${attempts} failed:`, error);
+                    // Add a small delay between attempts
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            }
+            
             const processedData = this.processSheetData(data);
             SearchManager.init(processedData);
             
