@@ -146,8 +146,8 @@
 
   function fetchGoogleSheetsData(spreadsheetId, sheetName) {
     return new Promise((resolve, reject) => {
-        // Create the URL for the published CSV version of the sheet
-        const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
+        const scriptUrl = 'https://script.google.com/macros/s/AKfycbxUq5FCWznDB28yKSeHqFAv765nZ9P96N5hQNQebUYazmDT5fFG_5YAP7OP6FTcm3CJ/exec';
+        const url = `${scriptUrl}?path=${encodeURIComponent(sheetName)}`;
         
         console.log('Fetching from URL:', url);
         
@@ -156,22 +156,19 @@
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
-                return response.text();
+                return response.json();
             })
-            .then(csvText => {
-                // Parse CSV data
-                const rows = csvText.split('\n').map(row => 
-                    row.split(',').map(cell => 
-                        // Remove quotes and trim whitespace
-                        cell.replace(/^"|"$/g, '').trim()
-                    )
-                );
+            .then(jsonData => {
+                if (!Array.isArray(jsonData)) {
+                    throw new Error('Invalid data format received');
+                }
 
-                // Create table structure similar to the old format
+                // Convert the API response to our expected format
+                const headers = Object.keys(jsonData[0]);
                 const data = {
-                    cols: rows[0].map(header => ({ label: header })),
-                    rows: rows.slice(1).map(row => ({
-                        c: row.map(cell => ({ v: cell }))
+                    cols: headers.map(header => ({ label: header })),
+                    rows: jsonData.map(row => ({
+                        c: headers.map(header => ({ v: row[header] }))
                     }))
                 };
 

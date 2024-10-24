@@ -191,19 +191,54 @@ By following these guidelines, you can help ensure that the widget remains stabl
 
 ## Google Sheets Setup
 
-1. **Publish your Google Sheet**:
-   - Open your Google Sheet
-   - Go to File > Share > Publish to web
-   - Choose the specific sheet you want to publish
-   - Click "Publish"
-   - Copy the spreadsheet ID from the URL (the long string between /d/ and /edit)
+1. **Create a Google Apps Script**:
+   ```javascript
+   function convertToJson(data) {
+     const headers = data[0]
+     const raw_data = data.slice(1,)
+     let json = []
+     raw_data.forEach(d => {
+         let object = {}
+         for (let i = 0; i < headers.length; i++) {
+           object[headers[i]] = d[i]
+         }
+         json.push(object)
+     });
+     return json
+   }
 
-2. **Set Sharing Permissions**:
-   - Click the "Share" button in the top right
-   - Set to "Anyone with the link can view"
-   - Copy the spreadsheet ID
+   function json(sheetName) {
+     const spreadsheet = SpreadsheetApp.getActiveSpreadsheet()
+     const sheet = spreadsheet.getSheetByName(sheetName)
+     const data = sheet.getDataRange().getValues()
+     const jsonData = convertToJson(data)
+     return ContentService
+           .createTextOutput(JSON.stringify(jsonData))
+           .setMimeType(ContentService.MimeType.JSON)
+   }
 
-3. **CORS Requirements**:
-   - The widget now uses direct CSV fetching instead of JSONP
-   - Make sure your Google Sheet is properly published and accessible
-   - If you experience CORS issues, you may need to implement a proxy server
+   function doGet(e) {
+     const path = e.parameter.path
+     return json(path)
+   }
+   ```
+
+2. **Deploy as Web App**:
+   - In Google Apps Script editor, click "Deploy" > "New deployment"
+   - Choose "Web app" as the deployment type
+   - Set "Execute as" to your account
+   - Set "Who has access" to "Anyone"
+   - Click "Deploy"
+   - Copy the web app URL
+
+3. **Update Widget Configuration**:
+   - Replace 'YOUR_SCRIPT_URL' in the code with your deployed web app URL
+
+4. **CORS Note**:
+   - Google Apps Script handles CORS automatically
+   - No additional configuration needed
+
+5. **Security Considerations**:
+   - The web app URL is public but can be restricted if needed
+   - Consider implementing caching to reduce API calls
+   - Monitor usage through Google Apps Script dashboard
