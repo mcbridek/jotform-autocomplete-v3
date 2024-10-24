@@ -149,7 +149,7 @@
       const script = document.createElement('script');
       const callbackName = 'googleSheetCallback_' + Math.round(Math.random() * 1000000);
       
-      // Define the callback function
+      // Define the callback function in the global scope
       window[callbackName] = function(response) {
         try {
           // Clean up
@@ -157,10 +157,20 @@
           document.body.removeChild(script);
           
           // Parse the response
-          const jsonText = response.replace(/^\)]\}while\(1\);/, '');
-          const data = JSON.parse(jsonText);
+          let data;
+          if (typeof response === 'string') {
+            // If response is a string, parse it
+            const jsonText = response.replace(/^\)]\}while\(1\);/, '');
+            data = JSON.parse(jsonText);
+          } else if (typeof response === 'object') {
+            // If response is already an object, use it directly
+            data = response;
+          } else {
+            throw new Error('Invalid response format');
+          }
           
-          console.log('Received data:', data); // Debug log
+          console.log('Raw response:', response);
+          console.log('Parsed data:', data);
           
           if (!data.table || !data.table.rows) {
             throw new Error('Invalid data structure');
@@ -174,16 +184,18 @@
           
           resolve(data.table);
         } catch (error) {
+          console.error('Error processing response:', error);
           reject(error);
         }
       };
 
       // Create the URL with the callback parameter
-      const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}&callback=window.${callbackName}`;
+      const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}&callback=${callbackName}`;
       console.log('Fetching from URL:', url);
       
       // Add error handling for script loading
-      script.onerror = () => {
+      script.onerror = (error) => {
+        console.error('Script loading error:', error);
         delete window[callbackName];
         document.body.removeChild(script);
         reject(new Error('Failed to load Google Sheets data'));
@@ -197,11 +209,12 @@
       // Add timeout with longer duration
       setTimeout(() => {
         if (window[callbackName]) {
+          console.error('Timeout reached for callback:', callbackName);
           delete window[callbackName];
           document.body.removeChild(script);
           reject(new Error('Timeout while fetching Google Sheets data'));
         }
-      }, 30000); // Increased to 30 seconds
+      }, 30000); // 30 seconds timeout
     });
   }
 
