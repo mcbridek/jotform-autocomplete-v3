@@ -42,7 +42,6 @@
       JFCustomWidget.subscribe("ready", function(data) {
         console.log('Received ready event with data:', data);
         handleWidgetReady(data);
-        requestResize(); // Add this line
       });
       JFCustomWidget.subscribe("submit", handleSubmit);
     } else {
@@ -146,32 +145,24 @@
   }
 
   function fetchGoogleSheetsData(spreadsheetId, sheetName) {
-    const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
-    console.log('Fetching from URL:', url);
-
-    return fetch(url)
-      .then(response => {
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      const callbackName = 'googleSheetCallback_' + Math.round(Math.random() * 1000000);
+      
+      window[callbackName] = function(response) {
+        delete window[callbackName];
+        document.body.removeChild(script);
+        if (response.status === 'ok') {
+          resolve(response.table);
+        } else {
+          reject(new Error('Failed to fetch Google Sheets data'));
         }
-        return response.text();
-      })
-      .then(csv => {
-        const rows = csv.split('\n').map(row => row.split(','));
-        const headers = rows[0];
-        const data = rows.slice(1).map(row => {
-          const obj = {};
-          headers.forEach((header, index) => {
-            obj[header] = row[index];
-          });
-          return obj;
-        });
-        return { cols: headers.map(h => ({ label: h })), rows: data };
-      })
-      .catch(error => {
-        console.error('Error fetching data:', error);
-        throw error;
-      });
+      };
+
+      const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}&callback=${callbackName}`;
+      script.src = url;
+      document.body.appendChild(script);
+    });
   }
 
   function processSheetData(data) {
@@ -179,8 +170,7 @@
     const columnIndex = widgetConfig.columnIndex;
     return data.rows.map(row => {
       const value = row.c[columnIndex] ? row.c[columnIndex].v : '';
-      // Preprocess the value: convert to lowercase and remove special characters
-      const processedValue = value.toLowerCase().replace(/[^a-z0-9\s]/g, '');
+      const processedValue = value.toString().toLowerCase().replace(/[^a-z0-9\s]/g, '');
       return { 
         original: value,
         processed: processedValue
@@ -336,8 +326,15 @@
     hideSpinner();
     enableInput();
     elements.input.placeholder = 'Error loading data. Please try again.';
+    elements.input.title = error.message;
     validateInput(false);
-    window.parent.postMessage({ type: 'error', message: error.toString() }, '*');
+    if (typeof JFCustomWidget !== "undefined") {
+      JFCustomWidget.sendData({
+        valid: false,
+        value: ''
+      });
+    }
+    requestResize();
   }
 
   const originalLog = console.log;
