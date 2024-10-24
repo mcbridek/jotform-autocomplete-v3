@@ -4,17 +4,19 @@
   "width": "100%",
   "height": "auto",
   "settings": {
-    "googleSheetId": {
+    "scriptId": {
       "type": "text",
-      "label": "Google Sheet ID",
-      "description": "The ID of your Google Sheet (required)",
-      "required": true
+      "label": "Google Apps Script ID",
+      "description": "The deployment ID of your Google Apps Script (required)",
+      "required": true,
+      "default": "AKfycbxUq5FCWznDB28yKSeHqFAv765nZ9P96N5hQNQebUYazmDT5fFG_5YAP7OP6FTcm3CJ"
     },
     "sheetName": {
       "type": "text",
       "label": "Sheet Name",
       "description": "Name of the sheet to use (required)",
-      "required": true
+      "required": true,
+      "default": "FullList"
     },
     "columnIndex": {
       "type": "number",
@@ -39,6 +41,18 @@
       "label": "Maximum Results",
       "description": "Maximum number of suggestions to show",
       "default": 5
+    },
+    "threshold": {
+      "type": "number",
+      "label": "Search Threshold",
+      "description": "Fuzzy search threshold (0.0 to 1.0)",
+      "default": 0.4
+    },
+    "distance": {
+      "type": "number",
+      "label": "Search Distance",
+      "description": "Maximum distance for fuzzy search",
+      "default": 100
     },
     "dynamicResize": {
       "type": "boolean",

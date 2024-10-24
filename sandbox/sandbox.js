@@ -1,5 +1,8 @@
 // Sandbox-specific JavaScript
 const widgetFrame = document.getElementById('widgetFrame');
+const consoleOutput = document.getElementById('consoleOutput');
+const suggestionsDisplay = document.getElementById('suggestionsDisplay');
+const fetchedDataDisplay = document.getElementById('fetchedDataDisplay');
 
 // Mock data for testing
 const mockData = [
@@ -12,9 +15,11 @@ const mockData = [
 
 function updateWidgetSettings() {
   const settings = {
-    googleSheetId: document.getElementById('googleSheetId').value,
+    scriptId: document.getElementById('scriptId').value,
     sheetName: document.getElementById('sheetName').value,
     placeholderText: document.getElementById('placeholderText').value,
+    minCharRequired: parseInt(document.getElementById('minCharRequired').value),
+    maxResults: parseInt(document.getElementById('maxResults').value),
     inputWidth: document.getElementById('inputWidth').value,
     autocompleteWidth: document.getElementById('autocompleteWidth').value,
     dynamicResize: document.getElementById('dynamicResize').checked
@@ -22,73 +27,143 @@ function updateWidgetSettings() {
 
   // Send settings to the iframe
   widgetFrame.contentWindow.postMessage({ type: 'updateSettings', settings: settings }, '*');
-
-  adjustIframeHeight();
 }
 
 // Listen for messages from the iframe
 window.addEventListener('message', function(event) {
-  console.log('Received message:', event.data);
-  if (event.data.type === 'log') {
-    console.log('Widget log:', event.data.message);
-    logToUI(event.data.message);
-  } else if (event.data.type === 'error') {
-    console.error('Widget error:', event.data.message);
-    logToUI('ERROR: ' + event.data.message, true);
-  } else if (event.data.type === 'resize') {
-    widgetFrame.style.height = event.data.height + 'px';
-  } else if (event.data.type === 'fetchedData') {
-    console.log('Fetched data:', event.data.data);
-    displayFetchedData(event.data.data);
-  } else if (event.data.type === 'suggestionsUpdated') {
-    console.log('Suggestions updated:', event.data.suggestions);
-    displaySuggestions(event.data.suggestions, event.data.query);
+  const data = event.data;
+  logToConsole(`Received message of type: ${data.type}`);
+  
+  switch(data.type) {
+    case 'log':
+      logToConsole(data.message);
+      break;
+      
+    case 'error':
+      logToConsole('ERROR: ' + data.message, true);
+      break;
+      
+    case 'fetchedData':
+      logToConsole('Received fetched data');
+      displayFetchedData(data.data);
+      break;
+      
+    case 'suggestionsUpdated':
+      logToConsole('Suggestions updated');
+      displaySuggestions(data.suggestions, data.query);
+      break;
+      
+    case 'resize':
+      logToConsole('Resize requested: ' + data.height + 'px');
+      widgetFrame.style.height = `${data.height}px`;
+      break;
+      
+    default:
+      logToConsole('Unknown message type: ' + data.type);
   }
 });
 
-function logToUI(message, isError = false) {
-  const logElement = document.createElement('div');
-  logElement.textContent = message;
-  if (isError) {
-    logElement.style.color = 'red';
-  }
-  document.getElementById('fullResultsDump').appendChild(logElement);
-}
-
-function adjustIframeHeight() {
-  const previewSection = document.querySelector('.preview-section');
-  const iframe = document.getElementById('widgetFrame');
-  iframe.style.height = (previewSection.clientHeight - 60) + 'px'; // Subtracting 60px for padding and heading
+function logToConsole(message, isError = false) {
+    const logEntry = document.createElement('div');
+    logEntry.className = isError ? 'error-log' : 'log-entry';
+    
+    // If the message is an object, stringify it
+    if (typeof message === 'object') {
+        try {
+            message = JSON.stringify(message, null, 2);
+        } catch (e) {
+            message = '[Complex Object]';
+        }
+    }
+    
+    const timestamp = new Date().toLocaleTimeString();
+    logEntry.innerHTML = `<span class="timestamp">[${timestamp}]</span> ${message}`;
+    consoleOutput.appendChild(logEntry);
+    consoleOutput.scrollTop = consoleOutput.scrollHeight;
 }
 
 function displayFetchedData(data) {
-  const dataDisplay = document.getElementById('fetchedDataDisplay');
-  dataDisplay.innerHTML = '<h4>Fetched Data:</h4>';
-  const pre = document.createElement('pre');
-  pre.textContent = JSON.stringify(data, null, 2);
-  dataDisplay.appendChild(pre);
+    console.log('Displaying fetched data:', data);
+    try {
+        fetchedDataDisplay.innerHTML = `
+            <div class="data-info">
+                <p>Data received at: ${new Date().toLocaleTimeString()}</p>
+                <p>Number of rows: ${data.rows ? data.rows.length : 0}</p>
+                <p>Columns: ${data.cols ? data.cols.map(col => col.label).join(', ') : 'None'}</p>
+            </div>
+            <pre>${JSON.stringify(data, null, 2)}</pre>
+        `;
+    } catch (error) {
+        fetchedDataDisplay.innerHTML = `<div class="error">Error displaying data: ${error.message}</div>`;
+    }
 }
 
 function displaySuggestions(suggestions, query) {
-  const suggestionsDisplay = document.getElementById('suggestionsDisplay');
-  suggestionsDisplay.innerHTML = '<h4>Current Suggestions:</h4>';
-  if (suggestions.length === 0) {
-    suggestionsDisplay.innerHTML += '<p>No suggestions for: ' + query + '</p>';
-  } else {
-    const ul = document.createElement('ul');
-    suggestions.forEach(suggestion => {
-      const li = document.createElement('li');
-      li.textContent = JSON.stringify(suggestion);
-      ul.appendChild(li);
-    });
-    suggestionsDisplay.appendChild(ul);
-  }
+  suggestionsDisplay.innerHTML = `
+    <div class="suggestions-info">
+      <p>Query: "${query}"</p>
+      <p>Results: ${suggestions.length}</p>
+    </div>
+    <ul class="suggestions-list">
+      ${suggestions.map(suggestion => `<li>${suggestion}</li>`).join('')}
+    </ul>
+  `;
 }
 
-// Initialize the widget when the page loads
-window.addEventListener('load', function() {
-  updateWidgetSettings();
-  adjustIframeHeight();
-});
+// Clear console button
+const clearConsoleButton = document.createElement('button');
+clearConsoleButton.textContent = 'Clear Console';
+clearConsoleButton.onclick = () => {
+  consoleOutput.innerHTML = '';
+};
+document.querySelector('.log-section').insertBefore(clearConsoleButton, consoleOutput);
 
-window.addEventListener('resize', adjustIframeHeight);
+// Add a clear log button
+const clearLogButton = document.createElement('button');
+clearLogButton.textContent = 'Clear Log';
+clearLogButton.onclick = () => {
+    consoleOutput.innerHTML = '';
+};
+document.querySelector('.log-section').insertBefore(clearLogButton, consoleOutput);
+
+// Add a test button to manually trigger data fetch
+const testFetchButton = document.createElement('button');
+testFetchButton.textContent = 'Test Fetch Data';
+testFetchButton.onclick = () => {
+    logToConsole('Manually triggering data fetch...');
+    const settings = {
+        sheetName: document.getElementById('sheetName').value
+    };
+    widgetFrame.contentWindow.postMessage({
+        type: 'updateSettings',
+        settings: settings
+    }, '*');
+};
+document.querySelector('.settings-form').appendChild(testFetchButton);
+
+// Add direct fetch test
+const directFetchButton = document.createElement('button');
+directFetchButton.textContent = 'Direct API Test';
+directFetchButton.onclick = async () => {
+    const scriptId = document.getElementById('scriptId').value;
+    const sheetName = document.getElementById('sheetName').value;
+    const url = `https://script.google.com/macros/s/${scriptId}/exec?path=${encodeURIComponent(sheetName)}`;
+    
+    logToConsole('Testing direct API call to: ' + url);
+    
+    try {
+        const response = await fetch(url);
+        const text = await response.text();
+        logToConsole('Raw API Response: ' + text);
+        
+        try {
+            const json = JSON.parse(text);
+            logToConsole('Parsed JSON: ' + JSON.stringify(json, null, 2));
+        } catch (e) {
+            logToConsole('Failed to parse JSON: ' + e.message, true);
+        }
+    } catch (error) {
+        logToConsole('Fetch error: ' + error.message, true);
+    }
+};
+document.querySelector('.settings-form').appendChild(directFetchButton);

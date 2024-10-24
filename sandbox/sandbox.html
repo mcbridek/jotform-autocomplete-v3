@@ -11,14 +11,17 @@
         <div class="settings-column">
             <h2>Widget Settings</h2>
             <div class="settings-form">
-                <label for="googleSheetId">Google Sheet ID:</label>
-                <input type="text" id="googleSheetId" value="1Xg_6DlbHku0zBiHhm54uDsubVpZDA5ELzl9rQcMS7j8">
-                
                 <label for="sheetName">Sheet Name:</label>
                 <input type="text" id="sheetName" value="FullList">
                 
                 <label for="placeholderText">Placeholder Text:</label>
                 <input type="text" id="placeholderText" value="Start typing...">
+                
+                <label for="minCharRequired">Minimum Characters:</label>
+                <input type="number" id="minCharRequired" value="3">
+                
+                <label for="maxResults">Maximum Results:</label>
+                <input type="number" id="maxResults" value="5">
                 
                 <label for="inputWidth">Input Width:</label>
                 <input type="text" id="inputWidth" value="100%">
@@ -29,6 +32,9 @@
                 <label for="dynamicResize">Dynamic Resize:</label>
                 <input type="checkbox" id="dynamicResize" checked>
                 
+                <label for="scriptId">Google Apps Script ID:</label>
+                <input type="text" id="scriptId" value="AKfycbxUq5FCWznDB28yKSeHqFAv765nZ9P96N5hQNQebUYazmDT5fFG_5YAP7OP6FTcm3CJ">
+                
                 <button onclick="updateWidgetSettings()">Update Settings</button>
             </div>
         </div>
@@ -38,14 +44,16 @@
                 <iframe id="widgetFrame" src="../index.html" width="100%" height="100"></iframe>
             </div>
             <div class="suggestions-section">
+                <h3>Current Suggestions</h3>
                 <div id="suggestionsDisplay"></div>
             </div>
             <div class="fetched-data-section">
+                <h3>Fetched Data</h3>
                 <div id="fetchedDataDisplay"></div>
             </div>
             <div class="log-section">
                 <h3>Console Output</h3>
-                <div id="fullResultsDump"></div>
+                <div id="consoleOutput"></div>
             </div>
         </div>
     </div>

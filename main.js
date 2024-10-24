@@ -1,435 +1,429 @@
-(function() {
-  function getWidgetSetting(settingName, defaultValue, parseFunc = (val) => val) {
-    if (typeof JFCustomWidget !== "undefined") {
-      const setting = JFCustomWidget.getWidgetSetting(settingName);
-      return setting !== undefined && setting !== '' ? parseFunc(setting) : defaultValue;
-    }
-    return defaultValue;
-  }
-
-  const defaultWidgetConfig = {
-    googleSheetId: '1Xg_6DlbHku0zBiHhm54uDsubVpZDA5ELzl9rQcMS7j8',
-    sheetName: 'FullList',
-    columnIndex: 1,
-    debounceTime: 300,
-    maxResults: 5,
-    minCharRequired: 3,
-    threshold: 0.4,
-    distance: 100,
-    tokenize: true,
-    matchAllTokens: true,
-    placeholderText: 'Begin te typen...',
-    inputWidth: '100%',
-    autocompleteWidth: '100%',
-    dynamicResize: true
-  };
-
-  let widgetConfig = { ...defaultWidgetConfig };
-  let fuseInstance;
-  let debounceTimer;
-  let currentFocus = -1;
-
-  const elements = {
-    input: document.getElementById('autocomplete-input'),
-    spinner: document.getElementById('spinner'),
-    suggestionsList: document.getElementById('suggestions-list')
-  };
-
-  function initWidget() {
-    console.log('Initializing widget...');
+// Config and State Management
+const WidgetConfig = {
+    defaults: {
+        scriptId: 'AKfycbxUq5FCWznDB28yKSeHqFAv765nZ9P96N5hQNQebUYazmDT5fFG_5YAP7OP6FTcm3CJ',
+        sheetName: 'FullList',
+        columnIndex: 1,
+        debounceTime: 300,
+        maxResults: 5,
+        minCharRequired: 3,
+        threshold: 0.4,
+        distance: 100,
+        tokenize: true,
+        matchAllTokens: true,
+        placeholderText: 'Begin te typen...',
+        inputWidth: '100%',
+        autocompleteWidth: '100%',
+        dynamicResize: true
+    },
     
-    // Initialize JotForm Widget
-    if (typeof JFCustomWidget !== "undefined") {
-      console.log('JFCustomWidget found, initializing...');
-      JFCustomWidget.subscribe("ready", function(data) {
-        console.log('JFCustomWidget ready event received:', data);
-        const settings = {
-          googleSheetId: JFCustomWidget.getWidgetSetting('googleSheetId'),
-          sheetName: JFCustomWidget.getWidgetSetting('sheetName'),
-          columnIndex: parseInt(JFCustomWidget.getWidgetSetting('columnIndex')) || 1,
-          placeholderText: JFCustomWidget.getWidgetSetting('placeholderText'),
-          minCharRequired: parseInt(JFCustomWidget.getWidgetSetting('minCharRequired')) || 3,
-          maxResults: parseInt(JFCustomWidget.getWidgetSetting('maxResults')) || 5
-        };
-        
-        // Log the retrieved settings
-        console.log('Retrieved settings:', settings);
-        
-        // Apply settings and initialize
-        handleWidgetReady({ settings: settings });
-      });
-
-      JFCustomWidget.subscribe("submit", handleSubmit);
-    } else {
-      // Standalone mode (sandbox)
-      console.warn("JFCustomWidget not found, running in standalone mode");
-      handleWidgetReady({ settings: defaultWidgetConfig });
-    }
-
-    // Add event listeners
-    elements.input.addEventListener('input', handleInput);
-    elements.input.addEventListener('keydown', handleKeyDown);
-    elements.input.addEventListener('blur', handleBlur);
-    elements.suggestionsList.addEventListener('click', handleSuggestionClick);
-  }
-
-  function handleWidgetReady(data) {
-    console.log('handleWidgetReady called with data:', data);
+    current: null,
     
-    // Merge settings with defaults
-    widgetConfig = {
-      ...defaultWidgetConfig,
-      ...data.settings
-    };
-
-    console.log('Final widget config:', widgetConfig);
-
-    // Validate Google Sheet ID
-    if (!widgetConfig.googleSheetId) {
-      handleError(new Error('Google Sheet ID is required'));
-      return;
+    init(settings) {
+        this.current = { ...this.defaults, ...settings };
+        return this.current;
+    },
+    
+    get(key) {
+        return this.current[key];
     }
+};
 
-    // Apply settings
-    elements.input.placeholder = widgetConfig.placeholderText;
-    elements.input.style.width = widgetConfig.inputWidth;
-    elements.suggestionsList.style.width = widgetConfig.autocompleteWidth;
-
-    // Start data fetch
-    console.log('Starting data fetch...');
-    showSpinner();
-    disableInput();
-
-    fetchGoogleSheetsData(widgetConfig.googleSheetId, widgetConfig.sheetName)
-      .then(data => {
-        console.log('Data fetched successfully:', data);
-        const processedData = processSheetData(data);
-        initFuse(processedData);
-        hideSpinner();
-        enableInput();
-        requestResize();
-      })
-      .catch(error => {
-        console.error('Error fetching data:', error);
-        handleError(error);
-      });
-  }
-
-  function handleSubmit() {
-    const value = elements.input.value;
-    const isValid = value.length >= widgetConfig.minCharRequired;
-    JFCustomWidget.sendSubmit({
-      valid: isValid,
-      value: value
-    });
-  }
-
-  function disableInput() {
-    elements.input.disabled = true;
-    elements.input.style.cursor = 'not-allowed';
-    elements.input.placeholder = 'Beroepen laden...';
-  }
-
-  function enableInput() {
-    elements.input.disabled = false;
-    elements.input.style.cursor = 'text';
-    elements.input.placeholder = widgetConfig.placeholderText || 'Begin te typen...';
-  }
-
-  function showSpinner() {
-    elements.spinner.style.display = 'block';
-  }
-
-  function hideSpinner() {
-    elements.spinner.style.display = 'none';
-  }
-
-  function fetchGoogleSheetsData(spreadsheetId, sheetName) {
-    return new Promise((resolve, reject) => {
-        const scriptUrl = 'https://script.google.com/macros/s/AKfycbxUq5FCWznDB28yKSeHqFAv765nZ9P96N5hQNQebUYazmDT5fFG_5YAP7OP6FTcm3CJ/exec';
-        const url = `${scriptUrl}?path=${encodeURIComponent(sheetName)}`;
-        
+// API Service
+const GoogleSheetsAPI = {
+    baseUrl: 'https://script.google.com/macros/s/',
+    
+    async fetchData(sheetName) {
+        const scriptId = WidgetConfig.get('scriptId');
+        const url = `${this.baseUrl}${scriptId}/exec?path=${encodeURIComponent(sheetName)}`;
         console.log('Fetching from URL:', url);
         
-        fetch(url)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                return response.json();
-            })
-            .then(jsonData => {
-                if (!Array.isArray(jsonData)) {
-                    throw new Error('Invalid data format received');
-                }
-
-                // Convert the API response to our expected format
-                const headers = Object.keys(jsonData[0]);
-                const data = {
-                    cols: headers.map(header => ({ label: header })),
-                    rows: jsonData.map(row => ({
-                        c: headers.map(header => ({ v: row[header] }))
-                    }))
-                };
-
-                // Send the raw data to the parent for display
-                window.parent.postMessage({ 
-                    type: 'fetchedData', 
-                    data: data 
-                }, '*');
-                
-                resolve(data);
-            })
-            .catch(error => {
-                console.error('Error fetching data:', error);
-                reject(error);
-            });
-    });
-  }
-
-  function processSheetData(data) {
-    console.log('Raw sheet data:', data); // Add this line for debugging
-
-    if (!data || !data.cols || !data.rows) {
-      console.error('Invalid data structure:', data);
-      throw new Error('Invalid data structure received from Google Sheets');
-    }
-
-    const headers = data.cols.map(col => col.label);
-    const columnIndex = widgetConfig.columnIndex;
-
-    if (columnIndex < 0 || columnIndex >= headers.length) {
-      console.error('Invalid column index:', columnIndex);
-      throw new Error('Invalid column index');
-    }
-
-    return data.rows.map((row, rowIndex) => {
-      if (!row.c || !Array.isArray(row.c)) {
-        console.error(`Invalid row structure at index ${rowIndex}:`, row);
-        return { original: '', processed: '' };
-      }
-
-      const cell = row.c[columnIndex];
-      const value = cell && cell.v !== undefined ? cell.v : '';
-      const processedValue = value.toString().toLowerCase().replace(/[^a-z0-9\s]/g, '');
-      
-      return { 
-        original: value,
-        processed: processedValue
-      };
-    });
-  }
-
-  function initFuse(data) {
-    const options = {
-      keys: ['processed'],
-      threshold: widgetConfig.threshold,
-      distance: widgetConfig.distance,
-      tokenize: widgetConfig.tokenize,
-      matchAllTokens: widgetConfig.matchAllTokens,
-      findAllMatches: true
-    };
-    fuseInstance = new Fuse(data, options);
-  }
-
-  function handleInput() {
-    clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => {
-      const query = elements.input.value.trim();
-      if (query.length >= widgetConfig.minCharRequired) {
-        showSpinner();
-        const results = fuseInstance.search(query).slice(0, widgetConfig.maxResults);
-        displaySuggestions(results, query);
-        hideSpinner();
-        validateInput(true);
-      } else {
-        clearSuggestions();
-        validateInput(false);
-      }
-    }, widgetConfig.debounceTime);
-  }
-
-  function validateInput(isValid) {
-    if (typeof JFCustomWidget !== "undefined") {
-      JFCustomWidget.sendData({
-        valid: isValid,
-        value: elements.input.value
-      });
-    }
-  }
-
-  function displaySuggestions(results, query) {
-    clearSuggestions();
-    if (results.length === 0) {
-      return;
-    }
-    results.forEach((result, index) => {
-      const li = document.createElement('li');
-      li.innerHTML = highlightMatch(result.item.original, query);
-      li.setAttribute('role', 'option');
-      li.setAttribute('data-index', index);
-      elements.suggestionsList.appendChild(li);
-    });
-    elements.suggestionsList.style.display = 'block';
-    
-    // Set input bottom border to 0px when suggestions are shown
-    elements.input.style.borderBottomLeftRadius = '0';
-    elements.input.style.borderBottomRightRadius = '0';
-    
-    // Highlight the first suggestion
-    currentFocus = 0;
-    updateActiveSuggestion();
-
-    window.parent.postMessage({ 
-      type: 'suggestionsUpdated', 
-      suggestions: results.map(r => r.item.original),
-      query: query
-    }, '*');
-
-    if (widgetConfig.dynamicResize) {
-      requestResize();
-    }
-    requestResize(); // Add this line
-  }
-
-  function highlightMatch(text, query) {
-    const words = query.split(/\s+/);
-    let highlightedText = text;
-    words.forEach(word => {
-      const regex = new RegExp(`(${word})`, 'gi');
-      highlightedText = highlightedText.replace(regex, '<mark style="background-color: transparent; color: black; font-weight: bold;">$1</mark>');
-    });
-    return highlightedText;
-  }
-
-  function clearSuggestions() {
-    elements.suggestionsList.innerHTML = '';
-    elements.suggestionsList.style.display = 'none';
-    // Reset input bottom border when suggestions are cleared
-    elements.input.style.borderBottomLeftRadius = '8px';
-    elements.input.style.borderBottomRightRadius = '8px';
-    currentFocus = -1;
-    requestResize(); // Add this line
-  }
-
-  function handleKeyDown(e) {
-    if (!elements.suggestionsList.style.display || elements.suggestionsList.style.display === 'none') {
-      return;
-    }
-
-    const suggestions = elements.suggestionsList.getElementsByTagName('li');
-
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      currentFocus++;
-      if (currentFocus >= suggestions.length) currentFocus = 0;
-      updateActiveSuggestion();
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      currentFocus--;
-      if (currentFocus < 0) currentFocus = suggestions.length - 1;
-      updateActiveSuggestion();
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      if (currentFocus > -1) {
-        suggestions[currentFocus].click();
-      }
-    }
-  }
-
-  function updateActiveSuggestion() {
-    const suggestions = elements.suggestionsList.getElementsByTagName('li');
-    for (let i = 0; i < suggestions.length; i++) {
-      suggestions[i].classList.remove('active');
-    }
-    if (currentFocus > -1 && currentFocus < suggestions.length) {
-      suggestions[currentFocus].classList.add('active');
-    }
-  }
-
-  function handleSuggestionClick(event) {
-    if (event.target.tagName === 'LI') {
-      const value = event.target.textContent.replace(/<\/?mark>/g, '');
-      elements.input.value = value;
-      clearSuggestions();
-      
-      // Send data to JotForm as recommended
-      if (typeof JFCustomWidget !== "undefined") {
-        JFCustomWidget.sendData({
-          valid: true,
-          value: value
+        const response = await fetch(url, {
+            method: 'GET',
+            mode: 'cors',
+            headers: { 'Accept': 'application/json' }
         });
-      }
-      elements.input.focus();
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const text = await response.text();
+        const jsonData = JSON.parse(text);
+        
+        if (!Array.isArray(jsonData)) {
+            throw new Error('Invalid data format received - not an array');
+        }
+        
+        return this.transformData(jsonData);
+    },
+    
+    transformData(jsonData) {
+        const headers = Object.keys(jsonData[0] || {});
+        return {
+            cols: headers.map(header => ({ label: header })),
+            rows: jsonData.map(row => ({
+                c: headers.map(header => ({ v: row[header] }))
+            }))
+        };
     }
-  }
+};
 
-  function handleError(error) {
-    console.error('Error:', error);
-    hideSpinner();
-    enableInput();
-    elements.input.placeholder = 'Error loading data. Please try again.';
-    elements.input.title = error.message;
+// UI Manager
+const UIManager = {
+    elements: {
+        input: document.getElementById('autocomplete-input'),
+        spinner: document.getElementById('spinner'),
+        suggestionsList: document.getElementById('suggestions-list')
+    },
     
-    // Send error to parent for display
-    window.parent.postMessage({ 
-      type: 'error', 
-      message: error.toString() 
-    }, '*');
+    init() {
+        this.bindEvents();
+        this.initMutationObserver();
+        this.applySettings();
+    },
     
-    if (typeof JFCustomWidget !== "undefined") {
-      JFCustomWidget.sendData({
-        valid: false,
-        value: '',
-        message: error.message
-      });
+    bindEvents() {
+        this.elements.input.addEventListener('input', () => SearchManager.handleInput());
+        this.elements.input.addEventListener('keydown', (e) => this.handleKeyDown(e));
+        this.elements.input.addEventListener('blur', () => this.handleBlur());
+        this.elements.suggestionsList.addEventListener('click', (e) => this.handleSuggestionClick(e));
+    },
+    
+    initMutationObserver() {
+        const observer = new MutationObserver(() => WidgetController.requestResize());
+        observer.observe(document.body, { childList: true, subtree: true });
+    },
+    
+    applySettings() {
+        this.elements.input.placeholder = WidgetConfig.get('placeholderText');
+        this.elements.input.style.width = WidgetConfig.get('inputWidth');
+        this.elements.suggestionsList.style.width = WidgetConfig.get('autocompleteWidth');
+    },
+    
+    showSpinner() {
+        this.elements.spinner.style.display = 'block';
+    },
+    
+    hideSpinner() {
+        this.elements.spinner.style.display = 'none';
+    },
+    
+    enableInput() {
+        this.elements.input.disabled = false;
+        this.elements.input.style.cursor = 'text';
+        this.elements.input.placeholder = WidgetConfig.get('placeholderText');
+    },
+    
+    disableInput() {
+        this.elements.input.disabled = true;
+        this.elements.input.style.cursor = 'not-allowed';
+        this.elements.input.placeholder = 'Loading...';
+    },
+    
+    displaySuggestions(results, query) {
+        this.clearSuggestions();
+        if (results.length === 0) return;
+        
+        results.forEach((result, index) => {
+            const li = document.createElement('li');
+            li.innerHTML = this.highlightMatch(result.item.original, query);
+            li.setAttribute('role', 'option');
+            li.setAttribute('data-index', index);
+            this.elements.suggestionsList.appendChild(li);
+        });
+        
+        this.elements.suggestionsList.style.display = 'block';
+        this.elements.input.style.borderBottomLeftRadius = '0';
+        this.elements.input.style.borderBottomRightRadius = '0';
+        
+        SearchManager.setCurrentFocus(0);
+        this.updateActiveSuggestion();
+        
+        // Force a reflow before calculating height
+        void this.elements.suggestionsList.offsetHeight;
+        
+        // Calculate and request new height
+        const totalHeight = this.calculateTotalHeight();
+        WidgetController.requestResize(totalHeight);
+    },
+    
+    clearSuggestions() {
+        this.elements.suggestionsList.innerHTML = '';
+        this.elements.suggestionsList.style.display = 'none';
+        this.elements.input.style.borderBottomLeftRadius = '8px';
+        this.elements.input.style.borderBottomRightRadius = '8px';
+        SearchManager.setCurrentFocus(-1);
+        
+        // Request resize with just input height
+        const totalHeight = this.calculateTotalHeight();
+        WidgetController.requestResize(totalHeight);
+    },
+    
+    highlightMatch(text, query) {
+        const words = query.split(/\s+/);
+        let highlightedText = text;
+        words.forEach(word => {
+            const regex = new RegExp(`(${word})`, 'gi');
+            highlightedText = highlightedText.replace(regex, '<mark>$1</mark>');
+        });
+        return highlightedText;
+    },
+    
+    handleKeyDown(e) {
+        const suggestions = this.elements.suggestionsList.getElementsByTagName('li');
+        if (!suggestions.length) return;
+        
+        switch(e.key) {
+            case 'ArrowDown':
+                e.preventDefault();
+                SearchManager.incrementFocus(1, suggestions.length);
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                SearchManager.incrementFocus(-1, suggestions.length);
+                break;
+            case 'Enter':
+                e.preventDefault();
+                if (SearchManager.getCurrentFocus() > -1) {
+                    suggestions[SearchManager.getCurrentFocus()].click();
+                }
+                break;
+        }
+        
+        this.updateActiveSuggestion();
+    },
+    
+    updateActiveSuggestion() {
+        const suggestions = this.elements.suggestionsList.getElementsByTagName('li');
+        Array.from(suggestions).forEach(s => s.classList.remove('active'));
+        
+        const currentFocus = SearchManager.getCurrentFocus();
+        if (currentFocus > -1 && currentFocus < suggestions.length) {
+            suggestions[currentFocus].classList.add('active');
+        }
+    },
+    
+    handleSuggestionClick(event) {
+        if (event.target.tagName === 'LI') {
+            const value = event.target.textContent.replace(/<\/?mark>/g, '');
+            this.elements.input.value = value;
+            this.clearSuggestions();
+            WidgetController.sendData(true, value);
+            this.elements.input.focus();
+        }
+    },
+    
+    handleBlur() {
+        setTimeout(() => this.clearSuggestions(), 200);
+    },
+    
+    calculateTotalHeight() {
+        const inputHeight = this.elements.input.offsetHeight;
+        const suggestionsHeight = this.elements.suggestionsList.offsetHeight;
+        const padding = 20; // Additional padding
+        return inputHeight + suggestionsHeight + padding;
     }
+};
+
+// Search Manager
+const SearchManager = {
+    fuseInstance: null,
+    debounceTimer: null,
+    currentFocus: -1,
     
-    requestResize();
-  }
-
-  const originalLog = console.log;
-  console.log = function(...args) {
-    originalLog.apply(console, args);
-    window.parent.postMessage({ type: 'log', message: args.join(' ') }, '*');
-  };
-
-  const originalError = console.error;
-  console.error = function(...args) {
-    originalError.apply(console, args);
-    window.parent.postMessage({ type: 'error', message: args.join(' ') }, '*');
-  };
-
-  function calculateTotalHeight() {
-    const inputHeight = elements.input.offsetHeight;
-    const suggestionsHeight = elements.suggestionsList.style.display === 'block' 
-      ? elements.suggestionsList.offsetHeight 
-      : 0;
-    const padding = 20;
-    return inputHeight + suggestionsHeight + padding;
-  }
-
-  function requestResize() {
-    const height = calculateTotalHeight();
-    console.log('Requesting resize to height:', height);
+    init(data) {
+        this.initFuse(data);
+    },
     
-    if (typeof JFCustomWidget !== "undefined") {
-      JFCustomWidget.requestFrameResize({
-        height: height
-      });
+    initFuse(data) {
+        const options = {
+            keys: ['processed'],
+            threshold: WidgetConfig.get('threshold'),
+            distance: WidgetConfig.get('distance'),
+            tokenize: WidgetConfig.get('tokenize'),
+            matchAllTokens: WidgetConfig.get('matchAllTokens'),
+            findAllMatches: true
+        };
+        this.fuseInstance = new Fuse(data, options);
+    },
+    
+    handleInput() {
+        clearTimeout(this.debounceTimer);
+        this.debounceTimer = setTimeout(() => {
+            const query = UIManager.elements.input.value.trim();
+            if (query.length >= WidgetConfig.get('minCharRequired')) {
+                UIManager.showSpinner();
+                const results = this.fuseInstance.search(query)
+                    .slice(0, WidgetConfig.get('maxResults'));
+                UIManager.displaySuggestions(results, query);
+                UIManager.hideSpinner();
+                WidgetController.sendData(true, query);
+            } else {
+                UIManager.clearSuggestions();
+                WidgetController.sendData(false, query);
+            }
+        }, WidgetConfig.get('debounceTime'));
+    },
+    
+    getCurrentFocus() {
+        return this.currentFocus;
+    },
+    
+    setCurrentFocus(value) {
+        this.currentFocus = value;
+    },
+    
+    incrementFocus(increment, maxLength) {
+        this.currentFocus += increment;
+        if (this.currentFocus >= maxLength) this.currentFocus = 0;
+        if (this.currentFocus < 0) this.currentFocus = maxLength - 1;
     }
-  }
+};
 
-  function handleBlur() {
-    // Use setTimeout to allow click events on suggestions to fire before clearing
-    setTimeout(() => {
-      clearSuggestions();
-    }, 200);
-  }
+// Widget Controller
+const WidgetController = {
+    async init() {
+        try {
+            await this.initializeWidget();
+            UIManager.init();
+        } catch (error) {
+            this.handleError(error);
+        }
+    },
+    
+    async initializeWidget() {
+        if (typeof JFCustomWidget !== "undefined") {
+            this.initJotFormWidget();
+        } else {
+            console.warn("JFCustomWidget not found, running in standalone mode");
+            await this.initStandaloneMode();
+        }
+        
+        // Add message listener for sandbox communication
+        window.addEventListener('message', (event) => this.handleMessage(event));
+    },
+    
+    async initJotFormWidget() {
+        JFCustomWidget.subscribe("ready", async (data) => {
+            const settings = {
+                sheetName: JFCustomWidget.getWidgetSetting('sheetName'),
+                columnIndex: parseInt(JFCustomWidget.getWidgetSetting('columnIndex')) || 1,
+                placeholderText: JFCustomWidget.getWidgetSetting('placeholderText'),
+                minCharRequired: parseInt(JFCustomWidget.getWidgetSetting('minCharRequired')) || 3,
+                maxResults: parseInt(JFCustomWidget.getWidgetSetting('maxResults')) || 5
+            };
+            
+            await this.handleWidgetReady({ settings });
+        });
+        
+        JFCustomWidget.subscribe("submit", () => this.handleSubmit());
+    },
+    
+    async initStandaloneMode() {
+        await this.handleWidgetReady({ settings: WidgetConfig.defaults });
+    },
+    
+    async handleWidgetReady(data) {
+        WidgetConfig.init(data.settings);
+        UIManager.applySettings();
+        
+        UIManager.showSpinner();
+        UIManager.disableInput();
+        
+        try {
+            const data = await GoogleSheetsAPI.fetchData(WidgetConfig.get('sheetName'));
+            const processedData = this.processSheetData(data);
+            SearchManager.init(processedData);
+            
+            UIManager.hideSpinner();
+            UIManager.enableInput();
+            this.requestResize();
+        } catch (error) {
+            this.handleError(error);
+        }
+    },
+    
+    processSheetData(data) {
+        if (!data || !data.cols || !data.rows) {
+            throw new Error('Invalid data structure received');
+        }
+        
+        const columnIndex = WidgetConfig.get('columnIndex');
+        return data.rows.map(row => {
+            const value = row.c[columnIndex]?.v || '';
+            return {
+                original: value,
+                processed: value.toString().toLowerCase().replace(/[^a-z0-9\s]/g, '')
+            };
+        });
+    },
+    
+    handleMessage(event) {
+        const data = event.data;
+        if (data.type === 'updateSettings') {
+            this.handleWidgetReady({ settings: data.settings });
+        }
+    },
+    
+    handleSubmit() {
+        const value = UIManager.elements.input.value;
+        const isValid = value.length >= WidgetConfig.get('minCharRequired');
+        this.sendSubmit(isValid, value);
+    },
+    
+    sendData(isValid, value) {
+        if (typeof JFCustomWidget !== "undefined") {
+            JFCustomWidget.sendData({
+                valid: isValid,
+                value: value
+            });
+        }
+    },
+    
+    sendSubmit(isValid, value) {
+        if (typeof JFCustomWidget !== "undefined") {
+            JFCustomWidget.sendSubmit({
+                valid: isValid,
+                value: value
+            });
+        }
+    },
+    
+    requestResize(height) {
+        if (!height) {
+            height = UIManager.calculateTotalHeight();
+        }
+        
+        console.log('Requesting resize to height:', height);
+        
+        if (typeof JFCustomWidget !== "undefined") {
+            JFCustomWidget.requestFrameResize({
+                height: height
+            });
+        }
+        
+        window.parent.postMessage({ 
+            type: 'resize', 
+            height: height 
+        }, '*');
+    },
+    
+    handleError(error) {
+        console.error('Error:', error);
+        UIManager.hideSpinner();
+        UIManager.enableInput();
+        UIManager.elements.input.placeholder = 'Error: ' + error.message;
+        
+        window.parent.postMessage({ 
+            type: 'error', 
+            message: error.toString() 
+        }, '*');
+        
+        this.sendData(false, '');
+        this.requestResize();
+    }
+};
 
-  initWidget();
-
-  // Add a mutation observer to detect DOM changes and resize accordingly
-  const observer = new MutationObserver(requestResize);
-  observer.observe(document.body, { childList: true, subtree: true });
-})();
+// Initialize the widget
+WidgetController.init();
