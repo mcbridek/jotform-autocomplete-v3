@@ -146,75 +146,47 @@
 
   function fetchGoogleSheetsData(spreadsheetId, sheetName) {
     return new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      const callbackName = 'googleSheetCallback_' + Math.round(Math.random() * 1000000);
-      
-      // Define the callback function in the global scope
-      window[callbackName] = function(response) {
-        try {
-          // Clean up
-          delete window[callbackName];
-          document.body.removeChild(script);
-          
-          // Parse the response
-          let data;
-          if (typeof response === 'string') {
-            // If response is a string, parse it
-            const jsonText = response.replace(/^\)]\}while\(1\);/, '');
-            data = JSON.parse(jsonText);
-          } else if (typeof response === 'object') {
-            // If response is already an object, use it directly
-            data = response;
-          } else {
-            throw new Error('Invalid response format');
-          }
-          
-          console.log('Raw response:', response);
-          console.log('Parsed data:', data);
-          
-          if (!data.table || !data.table.rows) {
-            throw new Error('Invalid data structure');
-          }
-          
-          // Send the raw data to the parent for display
-          window.parent.postMessage({ 
-            type: 'fetchedData', 
-            data: data.table 
-          }, '*');
-          
-          resolve(data.table);
-        } catch (error) {
-          console.error('Error processing response:', error);
-          reject(error);
-        }
-      };
+        // Create the URL for the published CSV version of the sheet
+        const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
+        
+        console.log('Fetching from URL:', url);
+        
+        fetch(url)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.text();
+            })
+            .then(csvText => {
+                // Parse CSV data
+                const rows = csvText.split('\n').map(row => 
+                    row.split(',').map(cell => 
+                        // Remove quotes and trim whitespace
+                        cell.replace(/^"|"$/g, '').trim()
+                    )
+                );
 
-      // Create the URL with the callback parameter
-      const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}&callback=${callbackName}`;
-      console.log('Fetching from URL:', url);
-      
-      // Add error handling for script loading
-      script.onerror = (error) => {
-        console.error('Script loading error:', error);
-        delete window[callbackName];
-        document.body.removeChild(script);
-        reject(new Error('Failed to load Google Sheets data'));
-      };
+                // Create table structure similar to the old format
+                const data = {
+                    cols: rows[0].map(header => ({ label: header })),
+                    rows: rows.slice(1).map(row => ({
+                        c: row.map(cell => ({ v: cell }))
+                    }))
+                };
 
-      // Load the script
-      script.src = url;
-      script.async = true;
-      document.body.appendChild(script);
-
-      // Add timeout with longer duration
-      setTimeout(() => {
-        if (window[callbackName]) {
-          console.error('Timeout reached for callback:', callbackName);
-          delete window[callbackName];
-          document.body.removeChild(script);
-          reject(new Error('Timeout while fetching Google Sheets data'));
-        }
-      }, 30000); // 30 seconds timeout
+                // Send the raw data to the parent for display
+                window.parent.postMessage({ 
+                    type: 'fetchedData', 
+                    data: data 
+                }, '*');
+                
+                resolve(data);
+            })
+            .catch(error => {
+                console.error('Error fetching data:', error);
+                reject(error);
+            });
     });
   }
 

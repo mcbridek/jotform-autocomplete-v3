@@ -188,3 +188,22 @@ When making changes to the Google Sheets Autocomplete Widget, please keep the fo
     - Keep external dependencies (like Fuse.js) updated, but always test thoroughly after updates.
 
 By following these guidelines, you can help ensure that the widget remains stable, functional, and easy to maintain as it evolves.
+
+## Google Sheets Setup
+
+1. **Publish your Google Sheet**:
+   - Open your Google Sheet
+   - Go to File > Share > Publish to web
+   - Choose the specific sheet you want to publish
+   - Click "Publish"
+   - Copy the spreadsheet ID from the URL (the long string between /d/ and /edit)
+
+2. **Set Sharing Permissions**:
+   - Click the "Share" button in the top right
+   - Set to "Anyone with the link can view"
+   - Copy the spreadsheet ID
+
+3. **CORS Requirements**:
+   - The widget now uses direct CSV fetching instead of JSONP
+   - Make sure your Google Sheet is properly published and accessible
+   - If you experience CORS issues, you may need to implement a proxy server
