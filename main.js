@@ -63,29 +63,44 @@
     
     // Use JFCustomWidget.getWidgetSetting for each setting
     widgetConfig = {
-      googleSheetId: JFCustomWidget.getWidgetSetting('googleSheetId') || defaultWidgetConfig.googleSheetId,
-      sheetName: JFCustomWidget.getWidgetSetting('sheetName') || defaultWidgetConfig.sheetName,
-      columnIndex: parseInt(JFCustomWidget.getWidgetSetting('columnIndex')) || defaultWidgetConfig.columnIndex,
-      debounceTime: parseInt(JFCustomWidget.getWidgetSetting('debounceTime')) || defaultWidgetConfig.debounceTime,
-      maxResults: parseInt(JFCustomWidget.getWidgetSetting('maxResults')) || defaultWidgetConfig.maxResults,
-      minCharRequired: parseInt(JFCustomWidget.getWidgetSetting('minCharRequired')) || defaultWidgetConfig.minCharRequired,
-      threshold: parseFloat(JFCustomWidget.getWidgetSetting('threshold')) || defaultWidgetConfig.threshold,
-      distance: parseInt(JFCustomWidget.getWidgetSetting('distance')) || defaultWidgetConfig.distance,
-      tokenize: JFCustomWidget.getWidgetSetting('tokenize') === 'true' || defaultWidgetConfig.tokenize,
-      matchAllTokens: JFCustomWidget.getWidgetSetting('matchAllTokens') === 'true' || defaultWidgetConfig.matchAllTokens,
-      placeholderText: JFCustomWidget.getWidgetSetting('placeholderText') || defaultWidgetConfig.placeholderText,
-      inputWidth: JFCustomWidget.getWidgetSetting('inputWidth') || defaultWidgetConfig.inputWidth,
-      autocompleteWidth: JFCustomWidget.getWidgetSetting('autocompleteWidth') || defaultWidgetConfig.autocompleteWidth,
-      dynamicResize: JFCustomWidget.getWidgetSetting('dynamicResize') === 'true' || defaultWidgetConfig.dynamicResize
+      googleSheetId: JFCustomWidget.getWidgetSetting('googleSheetId'),
+      sheetName: JFCustomWidget.getWidgetSetting('sheetName'),
+      columnIndex: parseInt(JFCustomWidget.getWidgetSetting('columnIndex')),
+      debounceTime: parseInt(JFCustomWidget.getWidgetSetting('debounceTime')),
+      maxResults: parseInt(JFCustomWidget.getWidgetSetting('maxResults')),
+      minCharRequired: parseInt(JFCustomWidget.getWidgetSetting('minCharRequired')),
+      threshold: parseFloat(JFCustomWidget.getWidgetSetting('threshold')),
+      distance: parseInt(JFCustomWidget.getWidgetSetting('distance')),
+      tokenize: JFCustomWidget.getWidgetSetting('tokenize') === 'true',
+      matchAllTokens: JFCustomWidget.getWidgetSetting('matchAllTokens') === 'true',
+      placeholderText: JFCustomWidget.getWidgetSetting('placeholderText'),
+      inputWidth: JFCustomWidget.getWidgetSetting('inputWidth'),
+      autocompleteWidth: JFCustomWidget.getWidgetSetting('autocompleteWidth'),
+      dynamicResize: JFCustomWidget.getWidgetSetting('dynamicResize') === 'true'
     };
+
+    // Use default values if settings are undefined
+    Object.keys(widgetConfig).forEach(key => {
+      if (widgetConfig[key] === undefined) {
+        widgetConfig[key] = defaultWidgetConfig[key];
+      }
+    });
 
     console.log('Widget config after applying settings:', widgetConfig);
 
-    // Apply settings to elements
+    // Apply settings and fetch data
+    applySettings();
+    fetchData();
+  }
+
+  function applySettings() {
     elements.input.placeholder = widgetConfig.placeholderText;
     elements.input.style.width = widgetConfig.inputWidth;
     elements.suggestionsList.style.width = widgetConfig.autocompleteWidth;
-    
+    requestResize();
+  }
+
+  function fetchData() {
     console.log('Fetching data from Google Sheets...');
     showSpinner();
     disableInput();
@@ -96,6 +111,7 @@
         initFuse(processedData);
         hideSpinner();
         enableInput();
+        requestResize();
       })
       .catch(handleError);
   }
@@ -130,36 +146,32 @@
   }
 
   function fetchGoogleSheetsData(spreadsheetId, sheetName) {
-    const corsAnywhereUrl = 'https://cors-anywhere.herokuapp.com/';
-    const url = `${corsAnywhereUrl}https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}`;
+    const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
     console.log('Fetching from URL:', url);
 
-    return fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest'
-      },
-    })
-    .then(response => {
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      return response.text();
-    })
-    .then(text => {
-      console.log('Received response:', text);
-      const jsonText = text.replace('/*O_o*/', '').replace(/(google\.visualization\.Query\.setResponse\(|\);$)/g, '');
-      const data = JSON.parse(jsonText);
-      if (!data.table || !data.table.rows) {
-        throw new Error('Invalid data structure: ' + JSON.stringify(data));
-      }
-      return data.table;
-    })
-    .catch(error => {
-      console.error('Error fetching data:', error);
-      throw error;
-    });
+    return fetch(url)
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.text();
+      })
+      .then(csv => {
+        const rows = csv.split('\n').map(row => row.split(','));
+        const headers = rows[0];
+        const data = rows.slice(1).map(row => {
+          const obj = {};
+          headers.forEach((header, index) => {
+            obj[header] = row[index];
+          });
+          return obj;
+        });
+        return { cols: headers.map(h => ({ label: h })), rows: data };
+      })
+      .catch(error => {
+        console.error('Error fetching data:', error);
+        throw error;
+      });
   }
 
   function processSheetData(data) {
@@ -342,7 +354,7 @@
 
   function requestResize() {
     if (typeof JFCustomWidget !== 'undefined') {
-      const totalHeight = document.body.offsetHeight;
+      const totalHeight = document.body.scrollHeight;
       console.log('Requesting frame resize to height:', totalHeight);
       JFCustomWidget.requestFrameResize({
         height: totalHeight
@@ -358,4 +370,8 @@
   }
 
   initWidget();
+
+  // Add a mutation observer to detect DOM changes and resize accordingly
+  const observer = new MutationObserver(requestResize);
+  observer.observe(document.body, { childList: true, subtree: true });
 })();
