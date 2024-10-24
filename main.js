@@ -84,6 +84,12 @@
 
     console.log('Final widget config:', widgetConfig);
 
+    // Validate Google Sheet ID
+    if (!widgetConfig.googleSheetId) {
+      handleError(new Error('Google Sheet ID is required'));
+      return;
+    }
+
     // Apply settings
     elements.input.placeholder = widgetConfig.placeholderText;
     elements.input.style.width = widgetConfig.inputWidth;
@@ -143,27 +149,58 @@
       const script = document.createElement('script');
       const callbackName = 'googleSheetCallback_' + Math.round(Math.random() * 1000000);
       
+      // Define the callback function
       window[callbackName] = function(response) {
-        delete window[callbackName];
-        document.body.removeChild(script);
-        console.log('Google Sheets response:', response); // Add this line for debugging
-        if (response.status === 'ok') {
-          resolve(response.table);
-        } else {
-          reject(new Error('Failed to fetch Google Sheets data: ' + JSON.stringify(response)));
+        try {
+          // Clean up
+          delete window[callbackName];
+          document.body.removeChild(script);
+          
+          // Parse the response
+          const jsonText = response.replace('/*O_o*/', '').replace(/(google\.visualization\.Query\.setResponse\(|\);$)/g, '');
+          const data = JSON.parse(jsonText);
+          
+          console.log('Received data:', data); // Debug log
+          
+          if (!data.table || !data.table.rows) {
+            throw new Error('Invalid data structure');
+          }
+          
+          // Send the raw data to the parent for display
+          window.parent.postMessage({ 
+            type: 'fetchedData', 
+            data: data.table 
+          }, '*');
+          
+          resolve(data.table);
+        } catch (error) {
+          reject(error);
         }
       };
 
-      const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}&callback=${callbackName}`;
+      // Create the URL with the callback parameter
+      const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}&tqx=responseHandler:${callbackName}`;
       console.log('Fetching from URL:', url);
-      script.src = url;
-      document.body.appendChild(script);
-
+      
+      // Add error handling for script loading
       script.onerror = () => {
         delete window[callbackName];
         document.body.removeChild(script);
         reject(new Error('Failed to load Google Sheets data'));
       };
+
+      // Load the script
+      script.src = url;
+      document.body.appendChild(script);
+
+      // Add timeout
+      setTimeout(() => {
+        if (window[callbackName]) {
+          delete window[callbackName];
+          document.body.removeChild(script);
+          reject(new Error('Timeout while fetching Google Sheets data'));
+        }
+      }, 10000);
     });
   }
 
@@ -350,6 +387,12 @@
     enableInput();
     elements.input.placeholder = 'Error loading data. Please try again.';
     elements.input.title = error.message;
+    
+    // Send error to parent for display
+    window.parent.postMessage({ 
+      type: 'error', 
+      message: error.toString() 
+    }, '*');
     
     if (typeof JFCustomWidget !== "undefined") {
       JFCustomWidget.sendData({
