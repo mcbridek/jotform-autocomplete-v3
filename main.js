@@ -42,6 +42,7 @@
       JFCustomWidget.subscribe("ready", function(data) {
         console.log('Received ready event with data:', data);
         handleWidgetReady(data);
+        requestResize(); // Add this line
       });
       JFCustomWidget.subscribe("submit", handleSubmit);
     } else {
@@ -59,23 +60,26 @@
 
   function handleWidgetReady(data) {
     console.log('Widget ready, received data:', data);
-    // Use getWidgetSetting to retrieve settings
+    
+    // Use JFCustomWidget.getWidgetSetting for each setting
     widgetConfig = {
-      googleSheetId: getWidgetSetting('googleSheetId', defaultWidgetConfig.googleSheetId),
-      sheetName: getWidgetSetting('sheetName', defaultWidgetConfig.sheetName),
-      columnIndex: getWidgetSetting('columnIndex', defaultWidgetConfig.columnIndex, parseInt),
-      debounceTime: getWidgetSetting('debounceTime', defaultWidgetConfig.debounceTime, parseInt),
-      maxResults: getWidgetSetting('maxResults', defaultWidgetConfig.maxResults, parseInt),
-      minCharRequired: getWidgetSetting('minCharRequired', defaultWidgetConfig.minCharRequired, parseInt),
-      threshold: getWidgetSetting('threshold', defaultWidgetConfig.threshold, parseFloat),
-      distance: getWidgetSetting('distance', defaultWidgetConfig.distance, parseInt),
-      tokenize: getWidgetSetting('tokenize', defaultWidgetConfig.tokenize, (val) => val === 'true'),
-      matchAllTokens: getWidgetSetting('matchAllTokens', defaultWidgetConfig.matchAllTokens, (val) => val === 'true'),
-      placeholderText: getWidgetSetting('placeholderText', defaultWidgetConfig.placeholderText),
-      inputWidth: getWidgetSetting('inputWidth', defaultWidgetConfig.inputWidth),
-      autocompleteWidth: getWidgetSetting('autocompleteWidth', defaultWidgetConfig.autocompleteWidth),
-      dynamicResize: getWidgetSetting('dynamicResize', defaultWidgetConfig.dynamicResize, (val) => val === 'true')
+      googleSheetId: JFCustomWidget.getWidgetSetting('googleSheetId') || defaultWidgetConfig.googleSheetId,
+      sheetName: JFCustomWidget.getWidgetSetting('sheetName') || defaultWidgetConfig.sheetName,
+      columnIndex: parseInt(JFCustomWidget.getWidgetSetting('columnIndex')) || defaultWidgetConfig.columnIndex,
+      debounceTime: parseInt(JFCustomWidget.getWidgetSetting('debounceTime')) || defaultWidgetConfig.debounceTime,
+      maxResults: parseInt(JFCustomWidget.getWidgetSetting('maxResults')) || defaultWidgetConfig.maxResults,
+      minCharRequired: parseInt(JFCustomWidget.getWidgetSetting('minCharRequired')) || defaultWidgetConfig.minCharRequired,
+      threshold: parseFloat(JFCustomWidget.getWidgetSetting('threshold')) || defaultWidgetConfig.threshold,
+      distance: parseInt(JFCustomWidget.getWidgetSetting('distance')) || defaultWidgetConfig.distance,
+      tokenize: JFCustomWidget.getWidgetSetting('tokenize') === 'true' || defaultWidgetConfig.tokenize,
+      matchAllTokens: JFCustomWidget.getWidgetSetting('matchAllTokens') === 'true' || defaultWidgetConfig.matchAllTokens,
+      placeholderText: JFCustomWidget.getWidgetSetting('placeholderText') || defaultWidgetConfig.placeholderText,
+      inputWidth: JFCustomWidget.getWidgetSetting('inputWidth') || defaultWidgetConfig.inputWidth,
+      autocompleteWidth: JFCustomWidget.getWidgetSetting('autocompleteWidth') || defaultWidgetConfig.autocompleteWidth,
+      dynamicResize: JFCustomWidget.getWidgetSetting('dynamicResize') === 'true' || defaultWidgetConfig.dynamicResize
     };
+
+    console.log('Widget config after applying settings:', widgetConfig);
 
     // Apply settings to elements
     elements.input.placeholder = widgetConfig.placeholderText;
@@ -144,12 +148,17 @@
       return response.text();
     })
     .then(text => {
+      console.log('Received response:', text);
       const jsonText = text.replace('/*O_o*/', '').replace(/(google\.visualization\.Query\.setResponse\(|\);$)/g, '');
       const data = JSON.parse(jsonText);
       if (!data.table || !data.table.rows) {
-        throw new Error('Invalid data structure');
+        throw new Error('Invalid data structure: ' + JSON.stringify(data));
       }
       return data.table;
+    })
+    .catch(error => {
+      console.error('Error fetching data:', error);
+      throw error;
     });
   }
 
@@ -236,6 +245,7 @@
     if (widgetConfig.dynamicResize) {
       requestResize();
     }
+    requestResize(); // Add this line
   }
 
   function highlightMatch(text, query) {
@@ -255,6 +265,7 @@
     elements.input.style.borderBottomLeftRadius = '8px';
     elements.input.style.borderBottomRightRadius = '8px';
     currentFocus = -1;
+    requestResize(); // Add this line
   }
 
   function handleKeyDown(e) {
@@ -330,17 +341,12 @@
   };
 
   function requestResize() {
-    if (typeof JFCustomWidget !== 'undefined' && widgetConfig.dynamicResize) {
-      const inputHeight = elements.input.offsetHeight;
-      const suggestionsHeight = elements.suggestionsList.style.display === 'block' ? elements.suggestionsList.offsetHeight : 0;
-      const totalHeight = inputHeight + suggestionsHeight + 20; // Adding 20px for padding
-
+    if (typeof JFCustomWidget !== 'undefined') {
+      const totalHeight = document.body.offsetHeight;
       console.log('Requesting frame resize to height:', totalHeight);
       JFCustomWidget.requestFrameResize({
         height: totalHeight
       });
-    } else {
-      console.warn('JFCustomWidget is not defined or dynamic resize is disabled');
     }
   }
 
