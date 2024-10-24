@@ -157,29 +157,30 @@
           document.body.removeChild(script);
           
           // Parse the response
-          const jsonText = response.replace('/*O_o*/', '').replace(/(google\.visualization\.Query\.setResponse\(|\);$)/g, '');
-          const data = JSON.parse(jsonText);
+          if (typeof response === 'string') {
+            response = JSON.parse(response);
+          }
           
-          console.log('Received data:', data); // Debug log
+          console.log('Received data:', response); // Debug log
           
-          if (!data.table || !data.table.rows) {
+          if (!response.table || !response.table.rows) {
             throw new Error('Invalid data structure');
           }
           
           // Send the raw data to the parent for display
           window.parent.postMessage({ 
             type: 'fetchedData', 
-            data: data.table 
+            data: response.table 
           }, '*');
           
-          resolve(data.table);
+          resolve(response.table);
         } catch (error) {
           reject(error);
         }
       };
 
       // Create the URL with the callback parameter
-      const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}&tqx=responseHandler:${callbackName}`;
+      const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}&callback=${callbackName}`;
       console.log('Fetching from URL:', url);
       
       // Add error handling for script loading
