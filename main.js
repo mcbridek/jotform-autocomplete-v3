@@ -157,30 +157,29 @@
           document.body.removeChild(script);
           
           // Parse the response
-          if (typeof response === 'string') {
-            response = JSON.parse(response);
-          }
+          const jsonText = response.replace(/^\)]\}while\(1\);/, '');
+          const data = JSON.parse(jsonText);
           
-          console.log('Received data:', response); // Debug log
+          console.log('Received data:', data); // Debug log
           
-          if (!response.table || !response.table.rows) {
+          if (!data.table || !data.table.rows) {
             throw new Error('Invalid data structure');
           }
           
           // Send the raw data to the parent for display
           window.parent.postMessage({ 
             type: 'fetchedData', 
-            data: response.table 
+            data: data.table 
           }, '*');
           
-          resolve(response.table);
+          resolve(data.table);
         } catch (error) {
           reject(error);
         }
       };
 
       // Create the URL with the callback parameter
-      const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}&callback=${callbackName}`;
+      const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}&callback=window.${callbackName}`;
       console.log('Fetching from URL:', url);
       
       // Add error handling for script loading
@@ -192,16 +191,17 @@
 
       // Load the script
       script.src = url;
+      script.async = true;
       document.body.appendChild(script);
 
-      // Add timeout
+      // Add timeout with longer duration
       setTimeout(() => {
         if (window[callbackName]) {
           delete window[callbackName];
           document.body.removeChild(script);
           reject(new Error('Timeout while fetching Google Sheets data'));
         }
-      }, 10000);
+      }, 30000); // Increased to 30 seconds
     });
   }
 
