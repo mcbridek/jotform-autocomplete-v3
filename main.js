@@ -38,12 +38,31 @@
   function initWidget() {
     console.log('Initializing widget...');
     if (typeof JFCustomWidget !== "undefined") {
-      console.log('JFCustomWidget is defined, subscribing to events...');
+      // Subscribe to ready event first, as per guidelines
       JFCustomWidget.subscribe("ready", function(data) {
         console.log('Received ready event with data:', data);
-        handleWidgetReady(data);
+        // Get settings using getWidgetSetting as recommended
+        const settings = {
+          googleSheetId: JFCustomWidget.getWidgetSetting('googleSheetId'),
+          sheetName: JFCustomWidget.getWidgetSetting('sheetName'),
+          columnIndex: parseInt(JFCustomWidget.getWidgetSetting('columnIndex')),
+          placeholderText: JFCustomWidget.getWidgetSetting('placeholderText'),
+          minCharRequired: parseInt(JFCustomWidget.getWidgetSetting('minCharRequired')),
+          maxResults: parseInt(JFCustomWidget.getWidgetSetting('maxResults'))
+        };
+        handleWidgetReady(settings);
       });
-      JFCustomWidget.subscribe("submit", handleSubmit);
+
+      // Subscribe to submit event
+      JFCustomWidget.subscribe("submit", function() {
+        const value = elements.input.value;
+        const isValid = value.length >= widgetConfig.minCharRequired;
+        // Use sendSubmit as recommended
+        JFCustomWidget.sendSubmit({
+          valid: isValid,
+          value: value
+        });
+      });
     } else {
       console.warn("JFCustomWidget is not defined. Running in standalone mode.");
       handleWidgetReady({});
@@ -60,34 +79,33 @@
   function handleWidgetReady(data) {
     console.log('Widget ready, received data:', data);
     
-    // Use JFCustomWidget.getWidgetSetting for each setting
+    // Use getWidgetSetting for each setting
     widgetConfig = {
       googleSheetId: JFCustomWidget.getWidgetSetting('googleSheetId'),
       sheetName: JFCustomWidget.getWidgetSetting('sheetName'),
       columnIndex: parseInt(JFCustomWidget.getWidgetSetting('columnIndex')),
-      debounceTime: parseInt(JFCustomWidget.getWidgetSetting('debounceTime')),
-      maxResults: parseInt(JFCustomWidget.getWidgetSetting('maxResults')),
-      minCharRequired: parseInt(JFCustomWidget.getWidgetSetting('minCharRequired')),
-      threshold: parseFloat(JFCustomWidget.getWidgetSetting('threshold')),
-      distance: parseInt(JFCustomWidget.getWidgetSetting('distance')),
-      tokenize: JFCustomWidget.getWidgetSetting('tokenize') === 'true',
-      matchAllTokens: JFCustomWidget.getWidgetSetting('matchAllTokens') === 'true',
       placeholderText: JFCustomWidget.getWidgetSetting('placeholderText'),
-      inputWidth: JFCustomWidget.getWidgetSetting('inputWidth'),
-      autocompleteWidth: JFCustomWidget.getWidgetSetting('autocompleteWidth'),
-      dynamicResize: JFCustomWidget.getWidgetSetting('dynamicResize') === 'true'
+      minCharRequired: parseInt(JFCustomWidget.getWidgetSetting('minCharRequired')),
+      maxResults: parseInt(JFCustomWidget.getWidgetSetting('maxResults')),
+      // Keep other settings as defaults
+      debounceTime: defaultWidgetConfig.debounceTime,
+      threshold: defaultWidgetConfig.threshold,
+      distance: defaultWidgetConfig.distance,
+      tokenize: defaultWidgetConfig.tokenize,
+      matchAllTokens: defaultWidgetConfig.matchAllTokens,
+      inputWidth: defaultWidgetConfig.inputWidth,
+      autocompleteWidth: defaultWidgetConfig.autocompleteWidth,
+      dynamicResize: defaultWidgetConfig.dynamicResize
     };
 
     // Use default values if settings are undefined
     Object.keys(widgetConfig).forEach(key => {
-      if (widgetConfig[key] === undefined) {
+      if (widgetConfig[key] === undefined || widgetConfig[key] === '') {
         widgetConfig[key] = defaultWidgetConfig[key];
       }
     });
 
     console.log('Widget config after applying settings:', widgetConfig);
-
-    // Apply settings and fetch data
     applySettings();
     fetchData();
   }
@@ -152,25 +170,53 @@
       window[callbackName] = function(response) {
         delete window[callbackName];
         document.body.removeChild(script);
+        console.log('Google Sheets response:', response); // Add this line for debugging
         if (response.status === 'ok') {
           resolve(response.table);
         } else {
-          reject(new Error('Failed to fetch Google Sheets data'));
+          reject(new Error('Failed to fetch Google Sheets data: ' + JSON.stringify(response)));
         }
       };
 
       const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}&callback=${callbackName}`;
+      console.log('Fetching from URL:', url);
       script.src = url;
       document.body.appendChild(script);
+
+      script.onerror = () => {
+        delete window[callbackName];
+        document.body.removeChild(script);
+        reject(new Error('Failed to load Google Sheets data'));
+      };
     });
   }
 
   function processSheetData(data) {
+    console.log('Raw sheet data:', data); // Add this line for debugging
+
+    if (!data || !data.cols || !data.rows) {
+      console.error('Invalid data structure:', data);
+      throw new Error('Invalid data structure received from Google Sheets');
+    }
+
     const headers = data.cols.map(col => col.label);
     const columnIndex = widgetConfig.columnIndex;
-    return data.rows.map(row => {
-      const value = row.c[columnIndex] ? row.c[columnIndex].v : '';
+
+    if (columnIndex < 0 || columnIndex >= headers.length) {
+      console.error('Invalid column index:', columnIndex);
+      throw new Error('Invalid column index');
+    }
+
+    return data.rows.map((row, rowIndex) => {
+      if (!row.c || !Array.isArray(row.c)) {
+        console.error(`Invalid row structure at index ${rowIndex}:`, row);
+        return { original: '', processed: '' };
+      }
+
+      const cell = row.c[columnIndex];
+      const value = cell && cell.v !== undefined ? cell.v : '';
       const processedValue = value.toString().toLowerCase().replace(/[^a-z0-9\s]/g, '');
+      
       return { 
         original: value,
         processed: processedValue
@@ -307,17 +353,18 @@
 
   function handleSuggestionClick(event) {
     if (event.target.tagName === 'LI') {
-      elements.input.value = event.target.textContent.replace(/<\/?mark>/g, '');
+      const value = event.target.textContent.replace(/<\/?mark>/g, '');
+      elements.input.value = value;
       clearSuggestions();
-      validateInput(true);
-      elements.input.focus();
       
-      // Notify JotForm of the selected value
+      // Send data to JotForm as recommended
       if (typeof JFCustomWidget !== "undefined") {
         JFCustomWidget.sendData({
-          value: elements.input.value
+          valid: true,
+          value: value
         });
       }
+      elements.input.focus();
     }
   }
 
@@ -349,12 +396,21 @@
     window.parent.postMessage({ type: 'error', message: args.join(' ') }, '*');
   };
 
+  function calculateTotalHeight() {
+    const inputHeight = elements.input.offsetHeight;
+    const suggestionsHeight = elements.suggestionsList.style.display === 'block' 
+      ? elements.suggestionsList.offsetHeight 
+      : 0;
+    const padding = 20; // Add some padding
+    return inputHeight + suggestionsHeight + padding;
+  }
+
   function requestResize() {
-    if (typeof JFCustomWidget !== 'undefined') {
-      const totalHeight = document.body.scrollHeight;
-      console.log('Requesting frame resize to height:', totalHeight);
+    if (typeof JFCustomWidget !== 'undefined' && widgetConfig.dynamicResize) {
+      const height = calculateTotalHeight();
+      // Use requestFrameResize as recommended
       JFCustomWidget.requestFrameResize({
-        height: totalHeight
+        height: height
       });
     }
   }

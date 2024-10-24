@@ -1,80 +1,50 @@
 {
-  "name": "googleSheetAutocomplete",
-  "label": "Google Sheet Autocomplete",
-  "icon": "https://www.example.com/icon.png",
-  "serverFiles": {
-    "js": ["main.js"],
-    "css": ["styles.css"]
-  },
-  "description": "An autocomplete widget with fuzzy search using data from a Google Sheet.",
-  "version": "1.0.0",
-  "options": {
+  "name": "Google Sheets Autocomplete",
+  "type": "iframe",
+  "width": "100%",
+  "height": "auto",
+  "settings": {
     "googleSheetId": {
       "type": "text",
       "label": "Google Sheet ID",
-      "description": "Enter the ID of your public Google Sheet.",
-      "required": true,
-      "default": "1Xg_6DlbHku0zBiHhm54uDsubVpZDA5ELzl9rQcMS7j8"
+      "description": "The ID of your Google Sheet (required)",
+      "required": true
+    },
+    "sheetName": {
+      "type": "text",
+      "label": "Sheet Name",
+      "description": "Name of the sheet to use (required)",
+      "required": true
     },
     "columnIndex": {
       "type": "number",
       "label": "Column Index",
-      "description": "Enter the zero-based index of the column to use for autocomplete (e.g., 0 for the first column).",
+      "description": "Index of the column to search (0-based)",
       "default": 1
     },
     "placeholderText": {
       "type": "text",
       "label": "Placeholder Text",
-      "description": "Specify the placeholder text for the input field.",
-      "default": "Start typing..."
-    },
-    "inputWidth": {
-      "type": "text",
-      "label": "Input Field Width",
-      "description": "Specify the width of the input field (e.g., '100%', '300px').",
-      "default": "100%"
-    },
-    "autocompleteWidth": {
-      "type": "text",
-      "label": "Autocomplete List Width",
-      "description": "Specify the width of the autocomplete suggestions list (e.g., '100%', '300px').",
-      "default": "100%"
-    },
-    "dynamicResize": {
-      "type": "boolean",
-      "label": "Enable Dynamic Resize",
-      "description": "Adjust iframe height dynamically when suggestions are displayed.",
-      "default": true
-    },
-    "threshold": {
-      "type": "number",
-      "label": "Search Threshold",
-      "description": "Controls how fuzzy the search is (0.0 to 1.0). Lower values are more exact.",
-      "default": 0.2
-    },
-    "distance": {
-      "type": "number",
-      "label": "Search Distance",
-      "description": "Maximum distance for a match. Shorter distances are more exact.",
-      "default": 100
-    },
-    "maxResults": {
-      "type": "number",
-      "label": "Max Results",
-      "description": "Maximum number of suggestions to display.",
-      "default": 5
+      "description": "Text to show when input is empty",
+      "default": "Begin te typen..."
     },
     "minCharRequired": {
       "type": "number",
-      "label": "Minimum Characters Required",
-      "description": "Minimum number of characters before suggestions appear.",
-      "default": 2
+      "label": "Minimum Characters",
+      "description": "Minimum characters before showing suggestions",
+      "default": 3
     },
-    "debounceTime": {
+    "maxResults": {
       "type": "number",
-      "label": "Debounce Time (ms)",
-      "description": "Delay in milliseconds for debouncing the input.",
-      "default": 300
+      "label": "Maximum Results",
+      "description": "Maximum number of suggestions to show",
+      "default": 5
+    },
+    "dynamicResize": {
+      "type": "boolean",
+      "label": "Dynamic Resize",
+      "description": "Automatically adjust widget height",
+      "default": true
     }
   }
 }
