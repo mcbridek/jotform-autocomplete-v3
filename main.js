@@ -129,6 +129,22 @@ const UIManager = {
     },
     
     bindEvents() {
+        // Add keypress event to prevent number input
+        this.elements.input.addEventListener('keypress', (e) => {
+            if (/[0-9]/.test(e.key)) {
+                e.preventDefault();
+                return false;
+            }
+        });
+        
+        // Add paste event to strip numbers
+        this.elements.input.addEventListener('paste', (e) => {
+            e.preventDefault();
+            const text = (e.clipboardData || window.clipboardData).getData('text');
+            const sanitizedText = text.replace(/[0-9]/g, '');
+            document.execCommand('insertText', false, sanitizedText);
+        });
+        
         this.elements.input.addEventListener('input', () => SearchManager.handleInput());
         this.elements.input.addEventListener('keydown', (e) => this.handleKeyDown(e));
         this.elements.input.addEventListener('blur', () => this.handleBlur());
@@ -296,7 +312,12 @@ const SearchManager = {
     handleInput() {
         clearTimeout(this.debounceTimer);
         this.debounceTimer = setTimeout(() => {
-            const query = UIManager.elements.input.value.trim();
+            let query = UIManager.elements.input.value.trim();
+            
+            // Remove any numbers from the input
+            query = query.replace(/[0-9]/g, '');
+            UIManager.elements.input.value = query;
+            
             if (query.length >= WidgetConfig.get('minCharRequired')) {
                 UIManager.showSpinner();
                 const results = this.fuseInstance.search(query)
@@ -421,13 +442,15 @@ const WidgetController = {
         }
         
         const columnIndex = WidgetConfig.get('columnIndex');
-        return data.rows.map(row => {
-            const value = row.c[columnIndex]?.v || '';
-            return {
-                original: value,
-                processed: value.toString().toLowerCase().replace(/[^a-z0-9\s]/g, '')
-            };
-        });
+        return data.rows
+            .map(row => {
+                const value = row.c[columnIndex]?.v || '';
+                return {
+                    original: value,
+                    processed: value.toString().toLowerCase().replace(/[^a-z\s]/g, '') // Only allow letters and spaces
+                };
+            })
+            .filter(item => item.processed.length > 0); // Remove entries that would be empty after filtering
     },
     
     handleMessage(event) {
